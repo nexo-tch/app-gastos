@@ -140,6 +140,31 @@ doc.querySelector('#forma-abono').dispatchEvent(
 comprobar('el abono queda registrado', guardado().abonos.length === 1);
 comprobar('el abono se asigna a gastos concretos', guardado().asignaciones.length > 0);
 
+/* ── 5b. Avisarle a la otra persona de su parte ─────────────────── */
+
+comprobar('cada deuda ofrece avisarle', doc.querySelector('[data-avisar]') !== null);
+
+clic('[data-avisar]');
+comprobar('la hoja de avisar se abre', doc.querySelector('#dialogo-avisar').open === true);
+
+const mensaje = texto('#avisar-mensaje');
+comprobar('el mensaje dice de cuánto es la parte', /Te toca \$/.test(mensaje), mensaje.slice(0, 70));
+comprobar('el mensaje lleva el enlace para abrirlo', mensaje.includes('#compartido='));
+comprobar(
+  'sin poder compartir, ofrece copiar',
+  texto('#avisar-enviar') === 'Copiar mensaje',
+  texto('#avisar-enviar'),
+);
+
+const enlaceCompartido = mensaje.match(/#compartido=[\w-]+/)?.[0] ?? '';
+comprobar('el enlace no viaja vacío', enlaceCompartido.length > 20);
+
+clic('#dialogo-avisar [data-cerrar]');
+
+/* ── 5c. Recibirlo en la app de la otra persona ─────────────────── */
+
+await revisarRecibido(enlaceCompartido, guardado());
+
 /* ── 6. Presupuesto y fijos ─────────────────────────────────────── */
 
 clic('.pestana[data-vista="presupuesto"]');
@@ -352,6 +377,107 @@ async function revisarEntrada() {
   const aviso = dentro.getElementById('error');
   comprobar('el motivo del rechazo se queda en pantalla', !aviso.hidden, aviso.textContent);
   comprobar('el botón vuelve a poder pulsarse', !dentro.getElementById('enviar').disabled);
+
+  ventana.close();
+}
+
+/**
+ * El otro lado del enlace: alguien lo abre en su propio navegador, sin nada
+ * guardado, y decide si esa parte entra en sus cuentas.
+ *
+ * Va en ventanas aparte porque el enlace se lee al arrancar y porque son de
+ * verdad dos personas distintas, cada una con sus datos.
+ */
+async function revisarRecibido(enlace, delQueComparte) {
+  const abrir = (previo) =>
+    new JSDOM(html, {
+      url: `http://localhost/${enlace}`,
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+      virtualConsole: consola,
+      beforeParse(window) {
+        const dialogo = window.HTMLDialogElement?.prototype;
+        if (dialogo) {
+          dialogo.showModal = function () {
+            this.open = true;
+          };
+          dialogo.close = function () {
+            this.open = false;
+          };
+        }
+        window.confirm = () => true;
+        if (previo) window.localStorage.setItem('gastos.prototipo.v1', JSON.stringify(previo));
+        window.addEventListener('error', (evento) =>
+          fallos.push(evento.error?.stack ?? evento.message),
+        );
+      },
+    }).window;
+
+  // Se decodifica aquí, con otras herramientas que las del navegador, para
+  // comprobar que lo que viaja es base64url de verdad y no algo que solo
+  // entiende quien lo escribió.
+  const crudo = enlace.replace('#compartido=', '').replace(/-/g, '+').replace(/_/g, '/');
+  const carga = JSON.parse(Buffer.from(crudo, 'base64').toString('utf8'));
+
+  const reparto = delQueComparte.repartos.find((r) => r.id === carga.i);
+  comprobar(
+    'el enlace lleva la parte que se repartió, no el total',
+    carga.c === reparto?.amountCents && carga.t > carga.c,
+    `${carga.c} de ${carga.t}`,
+  );
+
+  let ventana = abrir(null);
+  const suTexto = (selector) =>
+    ventana.document.querySelector(selector)?.textContent.replace(/\s+/g, ' ').trim() ?? '';
+  const suClic = (selector) =>
+    ventana.document
+      .querySelector(selector)
+      .dispatchEvent(new ventana.MouseEvent('click', { bubbles: true }));
+  const suyo = () => JSON.parse(ventana.localStorage.getItem('gastos.prototipo.v1'));
+
+  comprobar(
+    'el enlace abre la ficha de lo que le compartieron',
+    ventana.document.querySelector('#dialogo-recibido').open === true,
+  );
+  comprobar('la ficha dice cuánto le toca', suTexto('#recibido-resumen').includes(carga.q));
+  comprobar(
+    'y deja elegir en qué lo cuenta',
+    ventana.document.querySelectorAll('#recibido-categorias [data-categoria-recibido]').length > 5,
+  );
+
+  suClic('#recibido-agregar');
+
+  comprobar('agregarlo le crea un gasto', suyo().gastos.length === 1);
+  comprobar(
+    'con su parte y nada más',
+    suyo().gastos[0].myShareCents === carga.c && suyo().gastos[0].amountTotalCents === carga.c,
+    `${suyo().gastos[0].amountTotalCents}`,
+  );
+  comprobar(
+    'en la misma categoría que le pusieron, si la tiene',
+    suyo().gastos[0].categoryId === 'mercado',
+    `${suyo().gastos[0].categoryId} (venía "${carga.k}")`,
+  );
+  comprobar(
+    'y le queda apuntado que se la debe',
+    suyo().deudas.length === 1 && suyo().deudas[0].amountCents === carga.c,
+  );
+  comprobar('con la persona a la que se la debe', suyo().personas.length === 1);
+  comprobar('la tarjeta de esa persona lo dice', suTexto('#lienzo').includes('Le debes'));
+  comprobar('recargar no vuelve a preguntar lo mismo', ventana.location.hash === '');
+
+  const suEstado = suyo();
+  ventana.close();
+
+  // Un enlace se reenvía, se abre dos veces, se toca sin querer.
+  ventana = abrir(suEstado);
+  suClic('#recibido-agregar');
+
+  comprobar(
+    'abrir el mismo enlace otra vez no duplica el gasto ni la deuda',
+    suyo().gastos.length === 1 && suyo().deudas.length === 1 && suyo().personas.length === 1,
+    `${suyo().gastos.length} gastos, ${suyo().deudas.length} deudas`,
+  );
 
   ventana.close();
 }

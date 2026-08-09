@@ -11,6 +11,7 @@ import * as analitica from '../../packages/core/src/analytics.js';
 import * as presupuesto from '../../packages/core/src/domain/budget.js';
 import * as repartos from '../../packages/core/src/domain/splits.js';
 import * as deudas from '../../packages/core/src/domain/debts.js';
+import * as debidas from '../../packages/core/src/domain/owed.js';
 import { DEFAULT_CATEGORIES } from '../../packages/core/src/seed.js';
 
 const motor = {
@@ -20,6 +21,7 @@ const motor = {
   ...presupuesto,
   ...repartos,
   ...deudas,
+  ...debidas,
   DEFAULT_CATEGORIES,
 };
 

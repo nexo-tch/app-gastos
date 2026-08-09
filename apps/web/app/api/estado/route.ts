@@ -1,15 +1,32 @@
-import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { RevisionVieja, aplicarCambios, cambiosSchema, leerEstado } from '@/servidor/estado';
-import { SinPermiso, exigirUsuario } from '@/servidor/sesion';
+import {
+  aplicarCambios,
+  cambiosSchema,
+  estadoExportadoSchema,
+  leerEstado,
+  subirEstadoCompleto,
+} from '@/servidor/estado';
+import { problema, respuestaJson } from '@/servidor/respuesta';
+import { exigirUsuario } from '@/servidor/sesion';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+const peticionDelta = z.object({
+  revision: z.number().int().min(0),
+  cambios: cambiosSchema,
+});
+
+const peticionCompleto = z.object({
+  revision: z.number().int().min(0),
+  datos: estadoExportadoSchema,
+});
 
 /** Todo lo del usuario, en la forma exacta que el navegador sabe pintar. */
 export async function GET() {
   try {
     const usuario = await exigirUsuario();
-    return NextResponse.json({
+    return respuestaJson({
       revision: usuario.revision,
       nombre: usuario.nombre,
       correo: usuario.correo,
@@ -20,47 +37,35 @@ export async function GET() {
   }
 }
 
-const peticion = z.object({
-  revision: z.number().int().min(0),
-  cambios: cambiosSchema,
-});
-
-/** Solo lo que cambio desde el ultimo guardado confirmado. */
+/** Cambios incrementales, o la copia entera si llega `datos` en vez de `cambios`. */
 export async function PUT(request: Request) {
   try {
     const usuario = await exigirUsuario();
-    const cuerpo = peticion.safeParse(await request.json().catch(() => null));
+    const crudo = await request.json().catch(() => null);
 
-    if (!cuerpo.success) {
-      return NextResponse.json({ error: 'Cambios mal formados.' }, { status: 400 });
+    const delta = peticionDelta.safeParse(crudo);
+    if (delta.success) {
+      const revision = await aplicarCambios(usuario.id, delta.data.revision, delta.data.cambios);
+      return respuestaJson({ revision });
     }
 
-    const revision = await aplicarCambios(usuario.id, cuerpo.data.revision, cuerpo.data.cambios);
-    return NextResponse.json({ revision });
+    const completo = peticionCompleto.safeParse(crudo);
+    if (completo.success) {
+      const revision = await subirEstadoCompleto(
+        usuario.id,
+        completo.data.revision,
+        completo.data.datos,
+      );
+      return respuestaJson({ revision });
+    }
+
+    console.error(
+      'PUT /api/estado rechazado',
+      delta.error?.flatten(),
+      completo.error?.flatten(),
+    );
+    return respuestaJson({ error: 'Cambios mal formados.' }, { status: 400 });
   } catch (error) {
     return problema(error);
   }
-}
-
-async function problema(error: unknown) {
-  if (error instanceof SinPermiso) {
-    return NextResponse.json({ error: error.message }, { status: 401 });
-  }
-
-  if (error instanceof RevisionVieja) {
-    // Se devuelve el estado bueno junto con el conflicto para que el navegador
-    // pueda recargar sin pedir un segundo viaje.
-    const usuario = await exigirUsuario();
-    return NextResponse.json(
-      {
-        error: error.message,
-        revision: usuario.revision,
-        datos: await leerEstado(usuario.id),
-      },
-      { status: 409 },
-    );
-  }
-
-  console.error('Fallo en /api/estado', error);
-  return NextResponse.json({ error: 'No se pudo guardar.' }, { status: 500 });
 }

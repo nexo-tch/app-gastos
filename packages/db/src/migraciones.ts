@@ -43,4 +43,11 @@ export const MIGRACIONES: Migracion[] = [
       "CREATE UNIQUE INDEX \"usuarios_correo_idx\" ON \"usuarios\" USING btree (\"correo\");",
     ],
   },
+  {
+    nombre: "0001_deudas",
+    sentencias: [
+      "CREATE TABLE \"deudas\" (\n\t\"id\" text NOT NULL,\n\t\"usuario_id\" text NOT NULL,\n\t\"persona_id\" text NOT NULL,\n\t\"monto\" integer NOT NULL,\n\t\"descripcion\" text,\n\t\"ocurrio_en\" timestamp with time zone NOT NULL,\n\t\"pagada_en\" timestamp with time zone,\n\tCONSTRAINT \"deudas_usuario_id_id_pk\" PRIMARY KEY(\"usuario_id\",\"id\")\n);",
+      "ALTER TABLE \"deudas\" ADD CONSTRAINT \"deudas_usuario_id_usuarios_id_fk\" FOREIGN KEY (\"usuario_id\") REFERENCES \"public\".\"usuarios\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+    ],
+  },
 ];

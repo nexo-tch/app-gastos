@@ -9,7 +9,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import { cifrar, coincide } from './claves.js';
 import { comprobarClave, crearCuenta } from './cuentas.js';
-import { RevisionVieja, aplicarCambios, cambiosSchema, leerEstado } from './estado.js';
+import { RevisionVieja, aplicarCambios, cambiosSchema, leerEstado, subirEstadoCompleto } from './estado.js';
 import { borrarSesion, nuevaSesion, usuarioDeToken } from './sesion.js';
 
 beforeAll(async () => {
@@ -164,6 +164,55 @@ describe('guardar y volver a leer', () => {
     });
   });
 
+  it('guarda lo que le debo a alguien y que ya se lo pagué', async () => {
+    const usuarioId = await registrar('debo@ejemplo.com');
+
+    await aplicarCambios(
+      usuarioId,
+      0,
+      cambios({
+        personas: { puestos: [{ id: 'p1', name: 'Ana', posicion: 0 }] },
+        deudas: {
+          puestos: [
+            {
+              id: 'd1',
+              personId: 'p1',
+              amountCents: 60_000_00,
+              description: 'Mercado',
+              occurredAt: '2026-08-08T12:00:00-05:00',
+            },
+          ],
+        },
+      }),
+    );
+
+    const deuda = (await leerEstado(usuarioId)).deudas[0];
+    expect(deuda?.amountCents).toBe(60_000_00);
+    expect(deuda?.description).toBe('Mercado');
+    expect(deuda?.settledAt).toBe(null);
+
+    await aplicarCambios(
+      usuarioId,
+      1,
+      cambios({
+        deudas: {
+          puestos: [
+            {
+              id: 'd1',
+              personId: 'p1',
+              amountCents: 60_000_00,
+              description: 'Mercado',
+              occurredAt: '2026-08-08T12:00:00-05:00',
+              settledAt: '2026-08-10T12:00:00-05:00',
+            },
+          ],
+        },
+      }),
+    );
+
+    expect((await leerEstado(usuarioId)).deudas[0]?.settledAt).toBe('2026-08-10T17:00:00.000Z');
+  });
+
   it('quitar un tope del mes lo borra de la base', async () => {
     const usuarioId = await registrar('topes@ejemplo.com');
 
@@ -245,5 +294,24 @@ describe('dos cuentas no se tocan', () => {
 
     expect((await leerEstado(yo)).gastos).toHaveLength(1);
     expect((await leerEstado(otro)).gastos).toHaveLength(0);
+  });
+});
+
+describe('subir copia completa', () => {
+  it('persiste una copia exportada entera de un solo viaje', async () => {
+    const fs = await import('node:fs');
+    const ruta = process.env.GASTOS_FIXTURE ?? '/Users/mileniopc/Downloads/gastos-2026-08-09.json';
+    if (!fs.existsSync(ruta)) return;
+
+    const datos = JSON.parse(fs.readFileSync(ruta, 'utf8'));
+    const usuarioId = await registrar('usuario-real@ejemplo.com');
+
+    await subirEstadoCompleto(usuarioId, 0, datos);
+
+    const leido = await leerEstado(usuarioId);
+    expect(leido.gastos.length).toBe(19);
+    expect(leido.personas.length).toBe(9);
+    expect(leido.repartos.length).toBe(21);
+    expect(leido.fijos.length).toBe(10);
   });
 });

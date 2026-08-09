@@ -240,6 +240,55 @@
       </form>
     </dialog>
 
+    <!-- Avisarle a alguien de la parte que le toca -->
+    <dialog class="hoja hoja--angosta" id="dialogo-avisar" aria-labelledby="titulo-avisar">
+      <div class="hoja__forma">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-avisar">Avisarle</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="hoja__cuerpo">
+          <p class="pista" id="avisar-explicacion"></p>
+          <p class="mensaje" id="avisar-mensaje"></p>
+        </div>
+
+        <div class="hoja__pie">
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Después</button>
+          <button type="button" class="boton boton--solido" id="avisar-enviar">Compartir</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Un gasto que te compartieron y que decides si entra en tus cuentas -->
+    <dialog class="hoja hoja--angosta" id="dialogo-recibido" aria-labelledby="titulo-recibido">
+      <div class="hoja__forma">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-recibido">Te compartieron un gasto</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="hoja__cuerpo">
+          <p class="recibido__resumen" id="recibido-resumen"></p>
+          <p class="pista" id="recibido-explicacion"></p>
+
+          <fieldset class="campo">
+            <legend class="campo__etiqueta">En qué lo cuentas</legend>
+            <div class="rejilla-categorias" id="recibido-categorias"></div>
+          </fieldset>
+        </div>
+
+        <div class="hoja__pie">
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" id="recibido-descartar">Descartar</button>
+          <button type="button" class="boton boton--solido" id="recibido-agregar">
+            Agregar a mis gastos
+          </button>
+        </div>
+      </div>
+    </dialog>
+
     <!-- Crear o editar un gasto fijo -->
     <dialog class="hoja hoja--angosta" id="dialogo-fijo" aria-labelledby="titulo-fijo">
       <form method="dialog" class="hoja__forma" id="forma-fijo">

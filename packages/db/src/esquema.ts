@@ -166,6 +166,30 @@ export const abonos = pgTable(
   (t) => ({ pk: primaryKey({ columns: [t.usuarioId, t.id] }) }),
 );
 
+/**
+ * Lo que yo le debo a alguien: mi parte de un gasto que pago otra persona y
+ * que me llego por el enlace que ella comparte.
+ *
+ * No es un gasto con el reparto al reves. Del gasto de otro no se sabe nada
+ * mas que lo que cuente el enlace, y el gasto que se crea en mi cuenta es solo
+ * mi parte, para que el presupuesto la cuente. Esta fila es la otra mitad: que
+ * esa plata se la debo a alguien.
+ */
+export const deudas = pgTable(
+  'deudas',
+  {
+    id: text('id').notNull(),
+    ...dueno(),
+    personaId: text('persona_id').notNull(),
+    monto: integer('monto').notNull(),
+    descripcion: text('descripcion'),
+    ocurrioEn: timestamp('ocurrio_en', { withTimezone: true }).notNull(),
+    /** Con fecha, ya se pago. Se paga entera: aqui no hay abonos parciales. */
+    pagadaEn: timestamp('pagada_en', { withTimezone: true }),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.usuarioId, t.id] }) }),
+);
+
 export const asignaciones = pgTable(
   'asignaciones',
   {

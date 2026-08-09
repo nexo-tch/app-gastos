@@ -23,6 +23,7 @@ export type Estado = {
   repartos: Reparto[];
   abonos: Abono[];
   asignaciones: Asignacion[];
+  deudas: Deuda[];
   presupuestos: Record<string, { totalCents: number; limites: Record<string, number> }>;
   fijos: Fijo[];
   instancias: Instancia[];
@@ -110,6 +111,16 @@ const asignacionSchema = z.object({
 });
 type Asignacion = z.input<typeof asignacionSchema>;
 
+const deudaSchema = z.object({
+  id: identificador,
+  personId: identificador,
+  amountCents: centavos,
+  description: opcional(texto),
+  occurredAt: fecha,
+  settledAt: opcional(fecha),
+});
+type Deuda = Omit<z.input<typeof deudaSchema>, 'occurredAt'> & { occurredAt: string };
+
 const fijoSchema = z.object({
   id: identificador,
   name: texto,
@@ -154,12 +165,84 @@ export const cambiosSchema = z.object({
   repartos: delta(repartoSchema),
   abonos: delta(abonoSchema),
   asignaciones: delta(asignacionSchema),
+  deudas: delta(deudaSchema),
   fijos: delta(fijoSchema.extend({ posicion: z.number().int().default(0) })),
   instancias: delta(instanciaSchema),
   presupuestos: delta(presupuestoSchema),
 });
 
 export type Cambios = z.infer<typeof cambiosSchema>;
+
+/** La copia que exporta el navegador (`Descargar copia`). */
+export const estadoExportadoSchema = z.object({
+  version: z.literal(1),
+  cuentas: z.array(cuentaSchema),
+  categorias: z.array(categoriaSchema),
+  personas: z.array(personaSchema),
+  gastos: z.array(gastoSchema),
+  repartos: z.array(repartoSchema),
+  abonos: z.array(abonoSchema).default([]),
+  asignaciones: z.array(asignacionSchema).default([]),
+  deudas: z.array(deudaSchema).default([]),
+  fijos: z.array(fijoSchema).default([]),
+  instancias: z.array(instanciaSchema).default([]),
+  presupuestos: z
+    .record(
+      mesClave,
+      z.object({
+        totalCents: centavos,
+        limites: z.record(identificador, centavos).default({}),
+      }),
+    )
+    .default({}),
+});
+
+export type EstadoExportado = z.infer<typeof estadoExportadoSchema>;
+
+/** Convierte una copia entera en el delta que entiende `aplicarCambios`. */
+export function estadoACambios(datos: EstadoExportado): Cambios {
+  return cambiosSchema.parse({
+    cuentas: {
+      puestos: datos.cuentas.map((c, i) => ({ ...c, posicion: i })),
+      quitados: [],
+    },
+    categorias: {
+      puestos: datos.categorias.map((c, i) => ({ ...c, posicion: i })),
+      quitados: [],
+    },
+    personas: {
+      puestos: datos.personas.map((p, i) => ({ ...p, posicion: i })),
+      quitados: [],
+    },
+    gastos: { puestos: datos.gastos, quitados: [] },
+    repartos: { puestos: datos.repartos, quitados: [] },
+    abonos: { puestos: datos.abonos, quitados: [] },
+    asignaciones: { puestos: datos.asignaciones, quitados: [] },
+    deudas: { puestos: datos.deudas, quitados: [] },
+    fijos: {
+      puestos: datos.fijos.map((f, i) => ({ ...f, posicion: i })),
+      quitados: [],
+    },
+    instancias: { puestos: datos.instancias, quitados: [] },
+    presupuestos: {
+      puestos: Object.entries(datos.presupuestos).map(([mes, v]) => ({
+        mes,
+        totalCents: v.totalCents,
+        limites: v.limites,
+      })),
+      quitados: [],
+    },
+  });
+}
+
+/** Sube de una vez la copia exportada, pisando lo que haya en la cuenta. */
+export async function subirEstadoCompleto(
+  usuarioId: string,
+  revisionCliente: number,
+  datos: EstadoExportado,
+): Promise<number> {
+  return aplicarCambios(usuarioId, revisionCliente, estadoACambios(datos));
+}
 
 /* ══ Leer ═══════════════════════════════════════════════════════════ */
 
@@ -178,6 +261,7 @@ export async function leerEstado(usuarioId: string): Promise<Estado> {
     repartos,
     abonos,
     asignaciones,
+    deudas,
     presupuestos,
     topes,
     fijos,
@@ -198,6 +282,7 @@ export async function leerEstado(usuarioId: string): Promise<Estado> {
     db.select().from(esquema.repartos).where(mio(esquema.repartos)),
     db.select().from(esquema.abonos).where(mio(esquema.abonos)),
     db.select().from(esquema.asignaciones).where(mio(esquema.asignaciones)),
+    db.select().from(esquema.deudas).where(mio(esquema.deudas)),
     db.select().from(esquema.presupuestos).where(mio(esquema.presupuestos)),
     db.select().from(esquema.topes).where(mio(esquema.topes)),
     db.select().from(esquema.fijos).where(mio(esquema.fijos)).orderBy(asc(esquema.fijos.posicion)),
@@ -257,6 +342,14 @@ export async function leerEstado(usuarioId: string): Promise<Estado> {
       settlementId: a.abonoId,
       splitId: a.repartoId,
       amountCents: a.monto,
+    })),
+    deudas: deudas.map((d) => ({
+      id: d.id,
+      personId: d.personaId,
+      amountCents: d.monto,
+      description: d.descripcion,
+      occurredAt: d.ocurrioEn.toISOString(),
+      settledAt: iso(d.pagadaEn),
     })),
     presupuestos: porMes,
     fijos: fijos.map((f) => ({
@@ -366,6 +459,7 @@ export async function aplicarCambios(
     await quitarFilas(tx, esquema.asignaciones, usuarioId, cambios.asignaciones.quitados);
     await quitarFilas(tx, esquema.abonos, usuarioId, cambios.abonos.quitados);
     await quitarFilas(tx, esquema.repartos, usuarioId, cambios.repartos.quitados);
+    await quitarFilas(tx, esquema.deudas, usuarioId, cambios.deudas.quitados);
     await quitarFilas(tx, esquema.gastos, usuarioId, cambios.gastos.quitados);
     await quitarFilas(tx, esquema.fijos, usuarioId, cambios.fijos.quitados);
     await quitarFilas(tx, esquema.personas, usuarioId, cambios.personas.quitados);
@@ -484,6 +578,21 @@ export async function aplicarCambios(
         abonoId: a.settlementId,
         repartoId: a.splitId,
         monto: a.amountCents,
+      })),
+    );
+
+    await guardarFilas(
+      tx,
+      esquema.deudas,
+      clave,
+      cambios.deudas.puestos.map((d) => ({
+        id: d.id,
+        usuarioId,
+        personaId: d.personId,
+        monto: d.amountCents,
+        descripcion: d.description,
+        ocurrioEn: d.occurredAt,
+        pagadaEn: d.settledAt,
       })),
     );
 

@@ -65,6 +65,7 @@
       { nombre: 'repartos', ordenada: false },
       { nombre: 'abonos', ordenada: false },
       { nombre: 'asignaciones', ordenada: false },
+      { nombre: 'deudas', ordenada: false },
       { nombre: 'fijos', ordenada: true },
       { nombre: 'instancias', ordenada: false },
     ];
@@ -393,12 +394,27 @@
     repartos: [],
     abonos: [],
     asignaciones: [],
+    deudas: [],
     presupuestos: {},
     fijos: [],
     instancias: [],
   });
 
-  let datos = almacen.inicial() ?? vacio();
+  /**
+   * Un estado guardado por una versión anterior de la app no trae las listas
+   * que se agregaron después, y una lista que no existe rompe la primera
+   * pantalla. Pasa con la copia del navegador y con los archivos exportados.
+   */
+  function completar(estado) {
+    const plantilla = vacio();
+    for (const [nombre, valor] of Object.entries(plantilla)) {
+      if (Array.isArray(valor) && !Array.isArray(estado[nombre])) estado[nombre] = valor;
+    }
+    estado.presupuestos ??= {};
+    return estado;
+  }
+
+  let datos = completar(almacen.inicial() ?? vacio());
   let mes = M.monthKeyOf(new Date(), OFFSET);
   let vista = 'resumen';
 
@@ -509,13 +525,17 @@
     });
   }
 
-  const deudas = () =>
+  /** Lo que me deben, que sale de mis gastos y de cómo los repartí. */
+  const porCobrar = () =>
     M.computeDebts({
       expenses: gastosVivos(),
       splits: datos.repartos,
       settlements: datos.abonos,
       allocations: datos.asignaciones,
     });
+
+  /** Lo que yo debo, que llegó compartido y no sale de ningún gasto mío. */
+  const porPagar = () => M.computeOwed(datos.deudas);
 
   /* ══ Tablero: la barra del mes ═══════════════════════════════════ */
 
@@ -625,7 +645,7 @@
   /* ══ Vista: resumen ══════════════════════════════════════════════ */
 
   function vistaResumen(resumen) {
-    const cuentas = deudas();
+    const cuentas = porCobrar();
     const recientes = gastosDelMes(mes).slice(0, 8);
 
     return `
@@ -1085,15 +1105,22 @@
   /* ══ Vista: personas ═════════════════════════════════════════════ */
 
   function vistaPersonas() {
-    const cuentas = deudas();
+    const cuentas = porCobrar();
+    const mias = porPagar();
+
+    const rotulo =
+      [
+        cuentas.totalPendingCents > 0 ? `${plata(cuentas.totalPendingCents)} por cobrar` : '',
+        mias.totalPendingCents > 0 ? `${plata(mias.totalPendingCents)} por pagar` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ') || 'Todo al día';
 
     return `
       <section class="bloque">
         <div class="bloque__cabeza">
           <h2>Personas</h2>
-          <span class="rotulo">
-            ${cuentas.totalPendingCents > 0 ? `${plata(cuentas.totalPendingCents)} por cobrar` : 'Todo al día'}
-          </span>
+          <span class="rotulo">${rotulo}</span>
         </div>
 
         <form class="linea-alta" data-nueva-persona>
@@ -1108,32 +1135,47 @@
                  Agrega a quien compartes gastos y podrás derivarle una parte al registrar.
                </div>`
             : `<div class="tarjeta">
-                 ${datos.personas.map((persona) => tarjetaPersona(persona, cuentas)).join('')}
+                 ${datos.personas.map((persona) => tarjetaPersona(persona, cuentas, mias)).join('')}
                </div>`
         }
       </section>`;
   }
 
-  function tarjetaPersona(persona, cuentas) {
+  function tarjetaPersona(persona, cuentas, mias) {
     const cuenta = cuentas.byPerson.find((p) => p.personId === persona.id);
-    const pendiente = cuenta?.netCents ?? 0;
-    const signo = pendiente > 0 ? 'debe' : pendiente < 0 ? 'favor' : 'cero';
-    const items = (cuenta?.items ?? []).slice(0, 6);
-    const usada = datos.repartos.some((r) => r.personId === persona.id);
+    const mio = mias.byPerson.find((p) => p.personId === persona.id);
 
-    const etiqueta =
-      pendiente > 0
-        ? plata(pendiente)
-        : pendiente < 0
-          ? `${plata(-pendiente)} a favor`
-          : 'Al día';
+    const pendiente = cuenta?.netCents ?? 0;
+    const debido = mio?.pendingCents ?? 0;
+    const items = (cuenta?.items ?? []).slice(0, 6);
+
+    // Las deudas pagadas se quedan tachadas un rato: es la única forma de
+    // deshacer un "Pagué" que se tocó sin querer.
+    const debidos = [
+      ...(mio?.items ?? []).filter((d) => !d.settledAt),
+      ...(mio?.items ?? []).filter((d) => d.settledAt).slice(0, 3),
+    ];
+
+    const usada =
+      datos.repartos.some((r) => r.personId === persona.id) ||
+      datos.deudas.some((d) => d.personId === persona.id);
+
+    // Con las dos direcciones en la misma tarjeta, una cifra sola no dice nada:
+    // hay que decir siempre para qué lado va.
+    const saldos = [];
+    if (pendiente > 0) saldos.push({ signo: 'debe', texto: `Te debe ${plata(pendiente)}` });
+    else if (pendiente < 0) saldos.push({ signo: 'favor', texto: `${plata(-pendiente)} a favor` });
+    if (debido > 0) saldos.push({ signo: 'pago', texto: `Le debes ${plata(debido)}` });
+    if (saldos.length === 0) saldos.push({ signo: 'cero', texto: 'Al día' });
 
     return `
       <div class="persona">
         <div class="persona__cabeza">
           <span class="avatar">${escapar(iniciales(persona.name))}</span>
           <span class="persona__nombre">${escapar(persona.name)}</span>
-          <span class="persona__saldo" data-signo="${signo}">${etiqueta}</span>
+          ${saldos
+            .map((s) => `<span class="persona__saldo" data-signo="${s.signo}">${s.texto}</span>`)
+            .join('')}
           ${
             (cuenta?.pendingCents ?? 0) > 0
               ? `<button type="button" class="boton boton--marco boton--chico" data-abonar="${persona.id}">
@@ -1149,7 +1191,7 @@
         </div>
 
         ${
-          items.length > 0
+          items.length > 0 || debidos.length > 0
             ? `<div class="persona__cuerpo">
                  ${items
                    .map(
@@ -1158,6 +1200,13 @@
                        <span class="deuda__que">${escapar(nombreDelGasto(item.expenseId, nombreCategoria(item.categoryId)))}
                          · ${escapar(nombreDia(diaDeIso(item.occurredAt)))}</span>
                        <span class="deuda__cuanto">${plata(item.pendingCents || item.amountCents)}</span>
+                       ${
+                         item.isSettled
+                           ? ''
+                           : `<button type="button" class="boton boton--fantasma boton--chico"
+                                      data-avisar="${item.splitId}"
+                                      aria-label="Avisarle a ${escapar(persona.name)}">Avisar</button>`
+                       }
                      </div>`,
                    )
                    .join('')}
@@ -1167,6 +1216,19 @@
                           <span class="deuda__cuanto">${plata(cuenta.creditCents)}</span></div>`
                      : ''
                  }
+                 ${debidos
+                   .map(
+                     (deuda) => `
+                     <div class="deuda ${deuda.settledAt ? 'deuda--saldada' : ''}">
+                       <span class="deuda__que">Le debes: ${escapar(deuda.description || 'un gasto')}
+                         · ${escapar(nombreDia(diaDeIso(deuda.occurredAt)))}</span>
+                       <span class="deuda__cuanto">${plata(deuda.amountCents)}</span>
+                       <button type="button" class="boton boton--fantasma boton--chico" data-pague="${deuda.id}">
+                         ${deuda.settledAt ? 'Deshacer' : 'Pagué'}
+                       </button>
+                     </div>`,
+                   )
+                   .join('')}
                </div>`
             : ''
         }
@@ -1476,7 +1538,7 @@
 
   function abrirAbono(idPersona) {
     const persona = personaPorId(idPersona);
-    const cuenta = deudas().byPerson.find((p) => p.personId === idPersona);
+    const cuenta = porCobrar().byPerson.find((p) => p.personId === idPersona);
     if (!persona || !cuenta) return;
 
     abonoPara = idPersona;
@@ -1491,7 +1553,7 @@
   }
 
   function refrescarAbono() {
-    const cuenta = deudas().byPerson.find((p) => p.personId === abonoPara);
+    const cuenta = porCobrar().byPerson.find((p) => p.personId === abonoPara);
     if (!cuenta) return;
 
     const monto = centavosDesdeTexto(document.getElementById('abono-monto').value);
@@ -1625,6 +1687,254 @@
     avisar('Categoría eliminada');
   }
 
+  /* ══ Avisarle a la otra persona ══════════════════════════════════
+   * Registrar que alguien te debe una parte no le sirve de nada a esa persona:
+   * ella tambien esta llevando sus cuentas, y esa plata que va a salir de su
+   * bolsillo no aparece en ninguna parte hasta que se la gasta.
+   *
+   * El aviso viaja como un enlace por WhatsApp, no como una notificacion. Es a
+   * proposito: no hay cuentas que enlazar ni permisos que pedir, llega igual en
+   * iPhone y en Android, y quien lo recibe decide en su propia app si lo agrega.
+   * Lo que va dentro del enlace es solo ese gasto, nunca el resto de tus datos.
+   *
+   * Los datos viajan en el fragmento (detras del `#`), que el navegador nunca
+   * manda al servidor: la plata de nadie termina en un registro de accesos.
+   */
+
+  const MARCA_ENLACE = 'compartido';
+
+  const aClave = (texto) => {
+    const bytes = new TextEncoder().encode(texto);
+    let binario = '';
+    for (const byte of bytes) binario += String.fromCharCode(byte);
+    // base64 de toda la vida, pero apto para una URL: sin `+`, `/` ni relleno.
+    return btoa(binario).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  };
+
+  const deClave = (clave) => {
+    const base = clave.replace(/-/g, '+').replace(/_/g, '/');
+    const binario = atob(base + '='.repeat((4 - (base.length % 4)) % 4));
+    return new TextDecoder().decode(Uint8Array.from(binario, (c) => c.charCodeAt(0)));
+  };
+
+  /** Todo lo que la otra persona necesita saber de su parte, y nada más. */
+  function avisoDeReparto(idReparto) {
+    const reparto = datos.repartos.find((r) => r.id === idReparto);
+    const gasto = reparto ? datos.gastos.find((g) => g.id === reparto.expenseId) : null;
+    if (!reparto || !gasto) return null;
+
+    const quien = almacen.quienSoy();
+    const carga = {
+      v: 1,
+      i: reparto.id,
+      de: (quien?.nombre ?? '').trim().slice(0, 40),
+      q: String(nombreDelGasto(gasto.id, nombreCategoria(gasto.categoryId))).slice(0, 60),
+      // El nombre de la categoría, no su identificador: cada cuenta tiene los
+      // suyos, pero las de fábrica se llaman igual en las dos.
+      k: String(categoriaPorId(gasto.categoryId)?.name ?? '').slice(0, 30),
+      c: reparto.amountCents,
+      t: gasto.amountTotalCents,
+      d: diaDeIso(gasto.occurredAt),
+    };
+
+    const enlace = `${location.href.split('#')[0]}#${MARCA_ENLACE}=${aClave(JSON.stringify(carga))}`;
+    const cuando = nombreDia(carga.d).toLowerCase();
+
+    // En primera persona porque lo manda una persona, no la app. El nombre va
+    // dentro del enlace, para que al otro lado se sepa a quién se le debe.
+    const texto =
+      `Te comparto un gasto: ${carga.q}, ${cuando}. Te toca ${plata(carga.c)} de ${plata(carga.t)}.\n\n` +
+      `Ábrelo aquí y decides si lo agregas a tus gastos: ${enlace}`;
+
+    return { texto, persona: personaPorId(reparto.personId) };
+  }
+
+  const dialogoAvisar = document.getElementById('dialogo-avisar');
+  let avisoPendiente = null;
+
+  /** En el celular hay que compartir; en el escritorio, copiar y pegar. */
+  const sePuedeCompartir = () => typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+
+  function abrirAviso(idReparto) {
+    const aviso = avisoDeReparto(idReparto);
+    if (!aviso) return;
+
+    avisoPendiente = aviso;
+    const nombre = aviso.persona?.name ?? 'esa persona';
+
+    document.getElementById('titulo-avisar').textContent = `Avisarle a ${nombre}`;
+    document.getElementById('avisar-explicacion').textContent =
+      `${nombre} abre el enlace, ve su parte y decide si la agrega a sus gastos como una ` +
+      `deuda contigo. Del resto de tus cuentas no ve nada.`;
+    document.getElementById('avisar-mensaje').textContent = aviso.texto;
+    document.getElementById('avisar-enviar').textContent = sePuedeCompartir()
+      ? 'Compartir'
+      : 'Copiar mensaje';
+
+    dialogoAvisar.showModal();
+  }
+
+  async function enviarAviso() {
+    if (!avisoPendiente) return;
+    const texto = avisoPendiente.texto;
+
+    // El enlace va dentro del texto y no como `url` aparte porque hay apps que
+    // se quedan con uno de los dos campos y tiran el otro.
+    if (sePuedeCompartir()) {
+      try {
+        await navigator.share({ text: texto });
+        dialogoAvisar.close();
+        return;
+      } catch (error) {
+        // Cerrar la hoja de compartir no es un fallo del que haya que avisar.
+        if (error?.name === 'AbortError') return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(texto);
+      dialogoAvisar.close();
+      avisar('Mensaje copiado: pégalo en WhatsApp.');
+    } catch {
+      avisar('No se pudo copiar. Selecciona el mensaje y cópialo a mano.');
+    }
+  }
+
+  /* ══ Recibir la parte que te compartieron ════════════════════════ */
+
+  const dialogoRecibido = document.getElementById('dialogo-recibido');
+  let recibido = null;
+  let categoriaRecibido = null;
+
+  function leerEnlace() {
+    const marca = location.hash.match(new RegExp(`^#${MARCA_ENLACE}=(.+)$`));
+    if (!marca) return null;
+
+    try {
+      const carga = JSON.parse(deClave(marca[1]));
+      const monto = Number(carga?.c);
+      if (!Number.isInteger(monto) || monto <= 0) return null;
+
+      return {
+        i: typeof carga.i === 'string' ? carga.i.slice(0, 40) : '',
+        de: typeof carga.de === 'string' ? carga.de.slice(0, 40).trim() : '',
+        q: typeof carga.q === 'string' ? carga.q.slice(0, 60).trim() : '',
+        k: typeof carga.k === 'string' ? carga.k.slice(0, 30).trim() : '',
+        c: monto,
+        t: Number.isInteger(carga.t) && carga.t > 0 ? carga.t : monto,
+        d: /^\d{4}-\d{2}-\d{2}$/.test(carga.d) ? carga.d : hoyDia(),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Que recargar la página no vuelva a preguntar por algo ya resuelto. */
+  const olvidarEnlace = () => {
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  };
+
+  function abrirRecibido(carga) {
+    recibido = carga;
+
+    const sugerida = carga.k
+      ? categoriasActivas().find((c) => c.name.toLowerCase() === carga.k.toLowerCase())
+      : null;
+    categoriaRecibido = sugerida?.id ?? categoriasActivas()[0]?.id ?? null;
+
+    const quien = carga.de || 'Alguien';
+    document.getElementById('titulo-recibido').textContent = `${quien} te compartió un gasto`;
+    document.getElementById('recibido-resumen').innerHTML =
+      `<b>${escapar(carga.q || 'Un gasto')}</b> · ${escapar(nombreDia(carga.d))}<br />` +
+      `Tu parte es <b class="cifra">${plata(carga.c)}</b>` +
+      (carga.t > carga.c ? ` de ${plata(carga.t)}` : '');
+    document.getElementById('recibido-explicacion').textContent =
+      `Si lo agregas, esos ${plata(carga.c)} entran en tu presupuesto de este mes y queda ` +
+      `apuntado que se los debes a ${quien}.`;
+
+    pintarCategoriasRecibido();
+    dialogoRecibido.showModal();
+  }
+
+  function pintarCategoriasRecibido() {
+    document.getElementById('recibido-categorias').innerHTML = categoriasActivas()
+      .map(
+        (c) => `
+        <button type="button" class="ficha-categoria" data-categoria-recibido="${c.id}"
+                aria-pressed="${c.id === categoriaRecibido}">
+          <i class="categoria__mecha" style="background:${c.color}"></i>
+          <span>${escapar(c.name)}</span>
+        </button>`,
+      )
+      .join('');
+  }
+
+  function aceptarRecibido() {
+    const carga = recibido;
+    if (!carga) return;
+
+    const nombre = carga.de || 'Quien te compartió';
+
+    // Los identificadores salen del enlace, así que abrirlo dos veces reescribe
+    // las mismas dos filas en vez de duplicar el gasto y la deuda.
+    const idDeuda = carga.i ? `compartido-${carga.i}` : id();
+    const idGasto = `${idDeuda}-gasto`;
+
+    // Que se vea dónde quedó: es la pantalla que ahora dice que le debes.
+    vista = 'personas';
+
+    mutar((d) => {
+      let persona = d.personas.find((p) => p.name.toLowerCase() === nombre.toLowerCase());
+      if (!persona) {
+        persona = { id: id(), name: nombre };
+        d.personas.push(persona);
+      }
+
+      const gasto = {
+        id: idGasto,
+        accountId: null,
+        categoryId: categoriaRecibido,
+        status: 'confirmed',
+        source: 'manual',
+        // Es mi parte y nada más: del gasto completo de otra persona no me
+        // toca opinar, y sumarlo entero me inflaría el presupuesto.
+        amountTotalCents: carga.c,
+        myShareCents: carga.c,
+        currency: 'COP',
+        merchantRaw: carga.q || null,
+        merchantNormalized: carga.q ? carga.q.toUpperCase() : null,
+        description: `Compartido por ${persona.name}`,
+        occurredAt: isoDeDia(carga.d),
+        confirmedAt: ahora(),
+        createdAt: ahora(),
+        updatedAt: ahora(),
+        deletedAt: null,
+      };
+
+      const deuda = {
+        id: idDeuda,
+        personId: persona.id,
+        amountCents: carga.c,
+        description: carga.q || null,
+        occurredAt: isoDeDia(carga.d),
+        settledAt: null,
+      };
+
+      const yaEstaba = d.gastos.findIndex((g) => g.id === idGasto);
+      if (yaEstaba >= 0) d.gastos[yaEstaba] = gasto;
+      else d.gastos.push(gasto);
+
+      const previa = d.deudas.findIndex((x) => x.id === idDeuda);
+      if (previa >= 0) d.deudas[previa] = deuda;
+      else d.deudas.push(deuda);
+    });
+
+    recibido = null;
+    olvidarEnlace();
+    dialogoRecibido.close();
+    avisar(`Listo: le debes ${plata(carga.c)} a ${nombre}`);
+  }
+
   /* ══ Acciones sobre los datos ════════════════════════════════════ */
 
   function guardarGasto() {
@@ -1641,6 +1951,8 @@
     const comercio = document.getElementById('gasto-comercio').value.trim();
     const fecha = document.getElementById('gasto-fecha').value || hoyDia();
     const cuenta = document.getElementById('gasto-cuenta').value || null;
+    const editando = borrador.id;
+    const repartosNuevos = [];
 
     mutar((d) => {
       const idGasto = borrador.id ?? id();
@@ -1681,8 +1993,10 @@
 
       for (const parte of resultado.splits) {
         if (parte.amountCents <= 0) continue;
+        const idReparto = id();
+        repartosNuevos.push(idReparto);
         d.repartos.push({
-          id: id(),
+          id: idReparto,
           expenseId: idGasto,
           personId: parte.personId,
           amountCents: parte.amountCents,
@@ -1690,7 +2004,16 @@
       }
     });
 
-    avisar(borrador.id ? 'Gasto actualizado' : 'Gasto registrado');
+    avisar(editando ? 'Gasto actualizado' : 'Gasto registrado');
+
+    // Acabado de registrar es cuando el aviso sirve: la otra persona todavía no
+    // sabe que le toca una parte. Se espera a que se cierre esta hoja para abrir
+    // la otra. Si el gasto se repartió entre varios, cada uno lleva su mensaje y
+    // eso se hace mejor desde Personas, uno por uno.
+    if (!editando && repartosNuevos.length === 1) {
+      setTimeout(() => abrirAviso(repartosNuevos[0]), 60);
+    }
+
     return true;
   }
 
@@ -2000,6 +2323,46 @@
       return;
     }
 
+    const avisarle = objetivo.closest('[data-avisar]');
+    if (avisarle) {
+      abrirAviso(avisarle.dataset.avisar);
+      return;
+    }
+
+    if (objetivo.closest('#avisar-enviar')) {
+      enviarAviso();
+      return;
+    }
+
+    const categoriaRecibida = objetivo.closest('[data-categoria-recibido]');
+    if (categoriaRecibida) {
+      categoriaRecibido = categoriaRecibida.dataset.categoriaRecibido;
+      pintarCategoriasRecibido();
+      return;
+    }
+
+    if (objetivo.closest('#recibido-agregar')) {
+      aceptarRecibido();
+      return;
+    }
+
+    if (objetivo.closest('#recibido-descartar')) {
+      recibido = null;
+      olvidarEnlace();
+      dialogoRecibido.close();
+      return;
+    }
+
+    const pague = objetivo.closest('[data-pague]');
+    if (pague) {
+      const idDeuda = pague.dataset.pague;
+      mutar((d) => {
+        const deuda = d.deudas.find((x) => x.id === idDeuda);
+        if (deuda) deuda.settledAt = deuda.settledAt ? null : ahora();
+      });
+      return;
+    }
+
     const borrarPersona = objetivo.closest('[data-borrar-persona]');
     if (borrarPersona) {
       const idPersona = borrarPersona.dataset.borrarPersona;
@@ -2201,7 +2564,7 @@
       const lector = new FileReader();
       lector.onload = () => {
         try {
-          datos = JSON.parse(String(lector.result));
+          datos = completar(JSON.parse(String(lector.result)));
           almacen.guardar(datos);
           document.getElementById('dialogo-datos').close();
           pintar();
@@ -2221,7 +2584,7 @@
   document.getElementById('forma-abono').addEventListener('submit', () => {
     const monto = centavosDesdeTexto(document.getElementById('abono-monto').value);
     const fecha = document.getElementById('abono-fecha').value || hoyDia();
-    const cuenta = deudas().byPerson.find((p) => p.personId === abonoPara);
+    const cuenta = porCobrar().byPerson.find((p) => p.personId === abonoPara);
     if (!cuenta || monto <= 0) return;
 
     const propuesta = M.proposeSettlementAllocation(monto, cuenta.items);
@@ -2335,7 +2698,7 @@
   // Cuando el servidor manda su version de los datos, se cambia el estado
   // entero y se vuelve a pintar. Pasa al abrir y cuando hay un conflicto.
   almacen.escuchar((estado) => {
-    datos = estado;
+    datos = completar(estado);
     pintar();
   });
 
@@ -2343,6 +2706,10 @@
   // cuenta: abrir la app tiene que ser instantaneo, con o sin senal.
   pintar();
   almacen.estrenar(datos);
+
+  // Si se llego aqui desde un enlace compartido, lo primero es resolverlo.
+  const compartido = leerEnlace();
+  if (compartido) abrirRecibido(compartido);
 
   // Lo que hace que se pueda instalar en la pantalla de inicio y abrir sin
   // senal. No guarda datos, solo la cascara.

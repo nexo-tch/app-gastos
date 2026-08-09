@@ -6,7 +6,7 @@ Responde tres preguntas, en este orden de importancia:
 
 1. **¿Cuánto me queda este mes?** Descontando ya los gastos fijos que todavía no has pagado, para que la cifra no mienta.
 2. **¿En qué se me va?** Por categoría, con topes opcionales y aviso cuando el ritmo no da.
-3. **¿Quién me debe?** Repartes un gasto con quien quieras y la app lleva la cuenta hasta que te paguen.
+3. **¿Quién me debe y a quién le debo?** Repartes un gasto con quien quieras, le avisas con un enlace por WhatsApp, y la app lleva la cuenta por los dos lados hasta que se salde.
 
 ## Cómo está armado
 
@@ -57,6 +57,28 @@ Ninguna es obligatoria en desarrollo. Están documentadas en `apps/web/.env.exam
 | `GASTOS_DATABASE_DATABASE_URL` | El Postgres de producción. Si está, se usa; si no, PGlite. Es la cadena del *pooler*, y el nombre lo escribe la integración de Neon con Vercel: pega `_DATABASE_URL` detrás del prefijo de la conexión, que aquí es `GASTOS_DATABASE`. Se lee tal cual para no tener dos variables con la misma cadena. |
 | `PGLITE_DIR` | Dónde guarda PGlite en desarrollo. Por defecto `.datos/dev`. |
 
+### Los datos viven en Postgres, no en el celular
+
+La app guarda una copia en el navegador para abrir sin señal, pero **la fuente de verdad es tu cuenta en Postgres**. Cada cambio debería subir solo con `PUT /api/estado`; al entrar desde otro equipo, `GET /api/estado` trae lo mismo.
+
+Si usaste la app un rato y en otro dispositivo la cuenta sale vacía, lo más probable es que la copia del teléfono nunca llegó al servidor. Para subirla de una vez (sin tocar el frontend):
+
+1. En el celular: **Datos → Descargar copia** (te deja un `.json` como el de ejemplo).
+2. En el computador, con la sesión abierta en el mismo navegador, abre las herramientas de desarrollador → Application → Cookies y copia el valor de `gastos_sesion`.
+3. Sube la copia (el archivo exportado va dentro de `datos`; la revisión suele ser `0` si la cuenta está vacía):
+
+```bash
+curl -X POST 'https://TU-APP.vercel.app/api/estado/completo' \
+  -H 'content-type: application/json' \
+  -H 'cookie: gastos_sesion=EL-TOKEN-QUE-COPIASTE' \
+  -d "$(jq -n --slurpfile d gastos-2026-08-09.json '{revision: 0, datos: $d[0]}')" \
+  | jq '{revision, gastos: (.datos.gastos | length)}'
+```
+
+Si la cuenta ya tenía cambios en otro sitio, mira primero la revisión con `GET /api/estado` y usa ese número en lugar de `0`.
+
+A partir de ahí, cada gasto nuevo que registres debería seguir subiendo solo. Si no, revisa en Vercel → Logs que aparezcan `PUT /api/estado` con código 200 y no 400.
+
 ### Comprobar que todo está bien
 
 ```bash
@@ -95,6 +117,22 @@ Es la distinción que más confunde, y la app la sostiene en todas partes:
 - Un **tope de categoría** es para lo que decides cada vez: mercado, gasolina, salidas. No reserva nada, solo vigila.
 
 La gasolina es un tope, no un fijo: nadie te la cobra sola.
+
+## Avisarle a la otra persona
+
+Que alguien te deba una parte no le sirve de nada a esa persona: ella también lleva sus cuentas, y esa plata que va a salir de su bolsillo no aparece en ninguna parte hasta que se la gasta.
+
+Al registrar un gasto compartido, la app ofrece **avisarle**. Arma un mensaje con ese gasto y un enlace, y lo entrega al compartir del teléfono, así que sale por WhatsApp como cualquier otra cosa. Quien lo recibe abre su propia app, ve su parte y decide: si la agrega, en su cuenta se crea el gasto de su parte —que entra en su presupuesto— y queda apuntado que te la debe.
+
+Es un enlace y no una notificación, y eso es una decisión, no una limitación:
+
+- **No hay cuentas que enlazar.** Ningún usuario escribe en los datos de otro. Cada quien decide qué entra en los suyos, y el enlace no lleva nada más que ese gasto.
+- **El aviso llega de verdad.** Las notificaciones *push* en iPhone solo funcionan si la app está instalada en la pantalla de inicio; un WhatsApp llega siempre, en los dos sistemas.
+- **Los montos no pasan por el servidor.** Van en el fragmento de la URL, detrás del `#`, que el navegador nunca envía. No terminan en ningún registro de accesos.
+
+Los identificadores del gasto y de la deuda salen del propio enlace, así que abrirlo dos veces reescribe las mismas dos filas en vez de duplicar nada.
+
+Lo que yo debo es una lista aparte (`deudas`) y no un reparto con el signo cambiado: del gasto de otra persona no se sabe nada más que lo que ella cuente. Se paga entero, sin abonos parciales, porque cada deuda es la parte de un gasto concreto.
 
 ## Cómo entra la plata a la base
 

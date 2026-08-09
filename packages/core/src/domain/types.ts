@@ -103,6 +103,24 @@ export const settlementAllocationSchema = z.object({
 });
 export type SettlementAllocation = z.infer<typeof settlementAllocationSchema>;
 
+/**
+ * Mi parte de un gasto que pago otra persona.
+ *
+ * No es un gasto reversado ni un reparto negativo: del gasto de otro no se
+ * conoce nada mas que lo que esa persona comparta, asi que se guarda suelto,
+ * con el nombre de lo que fue y el dia.
+ */
+export const owedShareSchema = z.object({
+  id,
+  personId: id,
+  amountCents: nonNegativeCents,
+  description: z.string().nullish(),
+  occurredAt: isoDate,
+  /** Con fecha, ya se le pago. */
+  settledAt: isoDate.nullish(),
+});
+export type OwedShare = z.infer<typeof owedShareSchema>;
+
 export const budgetCategoryLimitSchema = z.object({
   id,
   budgetId: id,

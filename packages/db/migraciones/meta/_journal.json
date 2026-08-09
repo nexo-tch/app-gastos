@@ -8,6 +8,13 @@
       "when": 1786236429749,
       "tag": "0000_inicial",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786250900533,
+      "tag": "0001_deudas",
+      "breakpoints": true
     }
   ]
 }

@@ -76,7 +76,10 @@
       });
 
       if (respuesta.ok) {
-        location.href = '/';
+        // El fragmento sobrevive al desvío hasta aquí, pero no a esta línea si
+        // no se copia: es el gasto que alguien compartió y que trajo a esta
+        // persona a crearse la cuenta.
+        location.href = `/${location.hash}`;
         return;
       }
 
