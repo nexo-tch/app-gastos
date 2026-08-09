@@ -1372,7 +1372,13 @@
         ${
           item.isSettled
             ? ''
-            : `<button type="button" class="boton boton--fantasma boton--chico"
+            : `<button type="button" class="boton boton--fantasma boton--chico" data-gasto="${item.expenseId}">
+                 Editar
+               </button>
+               <button type="button" class="boton boton--fantasma boton--chico" data-quitar-reparto="${item.splitId}">
+                 Quitar
+               </button>
+               <button type="button" class="boton boton--fantasma boton--chico"
                        data-avisar="${item.splitId}"
                        aria-label="Avisarle a ${escapar(persona.name)}">Avisar</button>`
         }
@@ -1385,6 +1391,12 @@
         <span class="deuda__que">${escapar(deuda.description || 'un gasto')}
           · ${escapar(nombreDia(diaDeIso(deuda.occurredAt)))}</span>
         <span class="deuda__cuanto">${plata(deuda.amountCents)}</span>
+        <button type="button" class="boton boton--fantasma boton--chico" data-editar-deuda="${deuda.id}">
+          Editar
+        </button>
+        <button type="button" class="boton boton--fantasma boton--chico" data-borrar-deuda="${deuda.id}">
+          Quitar
+        </button>
         <button type="button" class="boton boton--fantasma boton--chico" data-pague="${deuda.id}">
           ${deuda.settledAt ? 'Deshacer' : 'Pagué'}
         </button>
@@ -2041,7 +2053,7 @@
 
   function registrarDeudaConGasto(
     d,
-    { idDeuda, personId, personName, description, amountCents, day, categoryId, gastoDescription },
+    { idDeuda, personId, personName, description, amountCents, day, categoryId, gastoDescription, settledAt },
   ) {
     const idGasto = `${idDeuda}${SUFIJO_GASTO_DEUDA}`;
     const etiqueta = description.trim() || 'Un gasto';
@@ -2071,12 +2083,21 @@
       amountCents,
       description: etiqueta,
       occurredAt: isoDeDia(day),
-      settledAt: null,
+      settledAt: settledAt ?? null,
     };
 
     const yaEstaba = d.gastos.findIndex((g) => g.id === idGasto);
-    if (yaEstaba >= 0) d.gastos[yaEstaba] = gasto;
-    else d.gastos.push(gasto);
+    if (yaEstaba >= 0) {
+      const previo = d.gastos[yaEstaba];
+      d.gastos[yaEstaba] = {
+        ...gasto,
+        createdAt: previo.createdAt,
+        confirmedAt: previo.confirmedAt ?? gasto.confirmedAt,
+        description: gastoDescription ?? previo.description ?? gasto.description,
+      };
+    } else {
+      d.gastos.push(gasto);
+    }
 
     const previa = d.deudas.findIndex((x) => x.id === idDeuda);
     if (previa >= 0) d.deudas[previa] = deuda;
@@ -2169,8 +2190,9 @@
 
   const dialogoDebo = document.getElementById('dialogo-debo');
   let categoriaDebo = null;
+  let deudaEditando = null;
 
-  function abrirDebo(idPersona) {
+  function abrirDebo(idPersona, idDeuda = null) {
     if (datos.personas.length === 0) {
       avisar('Agrega primero a la persona');
       agregandoPersona = true;
@@ -2179,16 +2201,21 @@
       return;
     }
 
-    categoriaDebo = categoriasActivas()[0]?.id ?? null;
+    deudaEditando = idDeuda;
+    const deuda = idDeuda ? datos.deudas.find((x) => x.id === idDeuda) : null;
+    const gasto = idDeuda ? datos.gastos.find((g) => g.id === `${idDeuda}${SUFIJO_GASTO_DEUDA}`) : null;
+
+    categoriaDebo = gasto?.categoryId ?? categoriasActivas()[0]?.id ?? null;
+    document.getElementById('titulo-debo').textContent = deuda ? 'Editar deuda' : 'Registrar deuda';
     document.getElementById('debo-persona').innerHTML = datos.personas
       .map(
         (p) =>
-          `<option value="${escapar(p.id)}" ${p.id === idPersona ? 'selected' : ''}>${escapar(p.name)}</option>`,
+          `<option value="${escapar(p.id)}" ${p.id === (deuda?.personId ?? idPersona) ? 'selected' : ''}>${escapar(p.name)}</option>`,
       )
       .join('');
-    document.getElementById('debo-descripcion').value = '';
-    document.getElementById('debo-monto').value = '';
-    document.getElementById('debo-fecha').value = hoyDia();
+    document.getElementById('debo-descripcion').value = deuda?.description ?? '';
+    document.getElementById('debo-monto').value = deuda ? textoDesdeCentavos(deuda.amountCents) : '';
+    document.getElementById('debo-fecha').value = deuda ? diaDeIso(deuda.occurredAt) : hoyDia();
     pintarCategoriasDebo();
     dialogoDebo.showModal();
     setTimeout(() => document.getElementById('debo-descripcion').focus(), 40);
@@ -2231,7 +2258,14 @@
       return false;
     }
 
-    const idDeuda = id();
+    const idDeuda = deudaEditando ?? id();
+    const eraEdicion = Boolean(deudaEditando);
+    const settledAt = deudaEditando
+      ? (datos.deudas.find((x) => x.id === deudaEditando)?.settledAt ?? null)
+      : null;
+    const gastoLigado = deudaEditando
+      ? datos.gastos.find((g) => g.id === `${deudaEditando}${SUFIJO_GASTO_DEUDA}`)
+      : null;
     vista = 'personas';
 
     mutar((d) => {
@@ -2243,12 +2277,41 @@
         amountCents,
         day,
         categoryId: categoriaDebo,
+        settledAt,
+        gastoDescription: gastoLigado?.description,
       });
     });
 
     dialogoDebo.close();
-    avisar(`Listo: le debes ${plata(amountCents)} a ${persona.name}`);
+    deudaEditando = null;
+    avisar(eraEdicion ? 'Deuda actualizada' : `Listo: le debes ${plata(amountCents)} a ${persona.name}`);
     return true;
+  }
+
+  function borrarDeuda(idDeuda) {
+    if (!confirm('¿Quitar este registro de deuda?')) return;
+    mutar((d) => {
+      d.deudas = d.deudas.filter((x) => x.id !== idDeuda);
+      const idGasto = `${idDeuda}${SUFIJO_GASTO_DEUDA}`;
+      const gasto = d.gastos.find((g) => g.id === idGasto);
+      if (gasto) {
+        gasto.deletedAt = ahora();
+        gasto.updatedAt = ahora();
+      }
+    });
+    avisar('Deuda quitada');
+  }
+
+  function quitarReparto(idSplit) {
+    if (datos.asignaciones.some((a) => a.splitId === idSplit)) {
+      avisar('Ya tiene abonos aplicados; ajústalo desde el gasto.');
+      return;
+    }
+    if (!confirm('¿Quitar lo que te debe de este gasto?')) return;
+    mutar((d) => {
+      d.repartos = d.repartos.filter((r) => r.id !== idSplit);
+    });
+    avisar('Deuda quitada');
   }
 
   /* ══ Acciones sobre los datos ════════════════════════════════════ */
@@ -2286,6 +2349,16 @@
           updatedAt: ahora(),
         });
         d.repartos = d.repartos.filter((r) => r.expenseId !== idGasto);
+
+        const idDeuda = idDeudaLigada(idGasto);
+        if (idDeuda) {
+          const deuda = d.deudas.find((x) => x.id === idDeuda);
+          if (deuda) {
+            deuda.amountCents = resultado.myShareCents;
+            deuda.description = comercio || deuda.description;
+            deuda.occurredAt = isoDeDia(fecha);
+          }
+        }
       } else {
         d.gastos.push({
           id: idGasto,
@@ -2707,6 +2780,24 @@
       return;
     }
 
+    const editarDeuda = objetivo.closest('[data-editar-deuda]');
+    if (editarDeuda) {
+      abrirDebo(null, editarDeuda.dataset.editarDeuda);
+      return;
+    }
+
+    const borrarDeudaBtn = objetivo.closest('[data-borrar-deuda]');
+    if (borrarDeudaBtn) {
+      borrarDeuda(borrarDeudaBtn.dataset.borrarDeuda);
+      return;
+    }
+
+    const quitarRepartoBtn = objetivo.closest('[data-quitar-reparto]');
+    if (quitarRepartoBtn) {
+      quitarReparto(quitarRepartoBtn.dataset.quitarReparto);
+      return;
+    }
+
     const deboPersona = objetivo.closest('[data-debo-persona]');
     if (deboPersona) {
       abrirDebo(deboPersona.dataset.deboPersona);
@@ -3051,6 +3142,10 @@
   document.getElementById('forma-debo').addEventListener('submit', (evento) => {
     evento.preventDefault();
     guardarDebo();
+  });
+
+  dialogoDebo.addEventListener('close', () => {
+    deudaEditando = null;
   });
 
   document.getElementById('forma-correo-persona').addEventListener('submit', (evento) => {

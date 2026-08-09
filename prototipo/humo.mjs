@@ -172,11 +172,41 @@ comprobar(
   guardado().gastos.some((g) => g.merchantRaw === 'Hamburguesa' && g.myShareCents === 2500000),
 );
 
+const deudaHamburguesa = guardado().deudas.find((d) => d.description === 'Hamburguesa');
+clic(`[data-editar-deuda="${deudaHamburguesa.id}"]`);
+comprobar('se puede editar una deuda manual', doc.querySelector('#dialogo-debo').open === true);
+escribir('#debo-monto', '30000');
+doc.querySelector('#forma-debo').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+comprobar(
+  'la deuda editada guarda el nuevo monto',
+  guardado().deudas.find((d) => d.id === deudaHamburguesa.id)?.amountCents === 3000000,
+);
+comprobar(
+  'editar la deuda también actualiza el gasto ligado',
+  guardado().gastos.find((g) => g.id === `${deudaHamburguesa.id}-gasto`)?.myShareCents === 3000000,
+);
+
+const idGastoDeuda = `${deudaHamburguesa.id}-gasto`;
+clic('.pestana[data-vista="gastos"]');
+clic(`[data-gasto="${idGastoDeuda}"]`);
+escribir('#gasto-monto', '35000');
+doc.querySelector('#forma-gasto').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+comprobar(
+  'editar el gasto ligado también actualiza la deuda',
+  guardado().deudas.find((d) => d.id === deudaHamburguesa.id)?.amountCents === 3500000,
+);
+
 clic('.pestana[data-vista="resumen"]');
 comprobar('el resumen lista lo que debes', texto('#lienzo').includes('Debes'));
 comprobar('el tablero muestra cuánto debes', texto('#tablero').includes('Yo debo'));
 
 clic('.pestana[data-vista="personas"]');
+clic(`[data-borrar-deuda="${deudaHamburguesa.id}"]`);
+comprobar('se puede quitar una deuda manual', !guardado().deudas.some((d) => d.id === deudaHamburguesa.id));
 
 clic('[data-abonar]');
 comprobar('el diálogo de abono se abre', doc.querySelector('#dialogo-abono').open === true);
