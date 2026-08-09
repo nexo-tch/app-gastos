@@ -289,6 +289,31 @@
       </div>
     </dialog>
 
+    <!-- Correo de cuenta de una persona (para reconocerla al compartir) -->
+    <dialog class="hoja hoja--angosta" id="dialogo-correo-persona" aria-labelledby="titulo-correo-persona">
+      <form method="dialog" class="hoja__forma" id="forma-correo-persona">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-correo-persona">Correo de su cuenta</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="hoja__cuerpo">
+          <p class="pista" id="correo-persona-explicacion"></p>
+          <label class="campo">
+            <span class="campo__etiqueta">Correo</span>
+            <input class="entrada" id="correo-persona" type="email" inputmode="email" autocomplete="email"
+                   placeholder="como@ejemplo.com" />
+          </label>
+        </div>
+
+        <div class="hoja__pie">
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Cancelar</button>
+          <button type="submit" class="boton boton--solido">Guardar</button>
+        </div>
+      </form>
+    </dialog>
+
     <!-- Registrar manualmente algo que le debes a alguien -->
     <dialog class="hoja hoja--angosta" id="dialogo-debo" aria-labelledby="titulo-debo">
       <form method="dialog" class="hoja__forma" id="forma-debo">

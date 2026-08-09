@@ -951,18 +951,6 @@ button {
   gap: 12px;
 }
 
-.persona__correo--editar {
-  flex: 1 1 100%;
-  margin-top: 6px;
-  padding-left: 42px;
-}
-
-.persona__correo .entrada {
-  flex: 1;
-  min-width: 0;
-  max-width: none;
-}
-
 .persona__bloque {
   display: flex;
   flex-direction: column;

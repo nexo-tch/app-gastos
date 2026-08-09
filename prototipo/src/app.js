@@ -481,7 +481,7 @@
   let mes = M.monthKeyOf(new Date(), OFFSET);
   let vista = 'resumen';
   let agregandoPersona = false;
-  let editandoCorreoPersona = null;
+  let correoPersonaEditando = null;
 
   /** Unico punto de escritura: aplica el cambio, persiste y redibuja. */
   function mutar(cambio) {
@@ -1261,7 +1261,6 @@
     const mio = mias.byPerson.find((p) => p.personId === persona.id);
 
     const pendienteCobrar = cuenta?.pendingCents ?? 0;
-    const netoCobrar = cuenta?.netCents ?? 0;
     const pendientePagar = mio?.pendingCents ?? 0;
 
     const itemsCobrar = [
@@ -1281,15 +1280,9 @@
       pendienteCobrar > 0 || itemsCobrar.length > 0 || (cuenta?.creditCents ?? 0) > 0;
     const hayBloquePagar = pendientePagar > 0 || itemsPagar.length > 0;
 
+    // Los montos viven en cada bloque; aquí solo decimos si está al día.
     const saldos = [];
-    if (!hayBloqueCobrar) {
-      if (netoCobrar > 0) saldos.push({ signo: 'debe', texto: `Te debe ${plata(netoCobrar)}` });
-      else if (netoCobrar < 0) saldos.push({ signo: 'favor', texto: `${plata(-netoCobrar)} a favor` });
-    }
-    if (!hayBloquePagar && pendientePagar > 0) {
-      saldos.push({ signo: 'pago', texto: `Le debes ${plata(pendientePagar)}` });
-    }
-    if (saldos.length === 0 && !hayBloqueCobrar && !hayBloquePagar) {
+    if (!hayBloqueCobrar && !hayBloquePagar) {
       saldos.push({ signo: 'cero', texto: 'Al día' });
     }
 
@@ -1333,22 +1326,16 @@
            </div>`
         : '';
 
-    const editandoCorreo = editandoCorreoPersona === persona.id;
-
     return `
       <div class="persona">
         <div class="persona__cabeza">
           <span class="avatar">${escapar(iniciales(persona.name))}</span>
           <div class="persona__identidad">
             <span class="persona__nombre">${escapar(persona.name)}</span>
-            ${
-              editandoCorreo
-                ? ''
-                : `<button type="button" class="icono icono--mini" data-editar-correo-persona="${persona.id}"
-                           aria-label="${persona.email ? `Cambiar correo de ${escapar(persona.name)}` : `Asociar correo de ${escapar(persona.name)}`}">
-                     ✎
-                   </button>`
-            }
+            <button type="button" class="icono icono--mini" data-editar-correo-persona="${persona.id}"
+                    aria-label="${persona.email ? `Cambiar correo de ${escapar(persona.name)}` : `Asociar correo de ${escapar(persona.name)}`}">
+              ✎
+            </button>
           </div>
           ${saldos
             .map((s) => `<span class="persona__saldo" data-signo="${s.signo}">${s.texto}</span>`)
@@ -1367,19 +1354,6 @@
             usada
               ? ''
               : `<button type="button" class="icono" data-borrar-persona="${persona.id}" aria-label="Quitar a ${escapar(persona.name)}">✕</button>`
-          }
-          ${
-            editandoCorreo
-              ? `<form class="persona__correo persona__correo--editar linea-alta" data-correo-persona="${persona.id}">
-                   <input class="entrada" name="correo" type="email" inputmode="email" autocomplete="email"
-                          value="${persona.email ? escapar(persona.email) : ''}"
-                          placeholder="Correo de su cuenta" />
-                   <button type="submit" class="boton boton--solido boton--chico">Guardar</button>
-                   <button type="button" class="boton boton--fantasma boton--chico" data-cancelar-correo-persona="${persona.id}">
-                     Cancelar
-                   </button>
-                 </form>`
-              : ''
           }
         </div>
 
@@ -2156,6 +2130,39 @@
     avisar(`Listo: le debes ${plata(carga.c)} a ${nombre}`);
   }
 
+  /* ══ Correo de cuenta de una persona ═════════════════════════════ */
+
+  const dialogoCorreoPersona = document.getElementById('dialogo-correo-persona');
+
+  function abrirCorreoPersona(idPersona) {
+    const persona = personaPorId(idPersona);
+    if (!persona) return;
+
+    correoPersonaEditando = idPersona;
+    document.getElementById('titulo-correo-persona').textContent = `Correo de ${persona.name}`;
+    document.getElementById('correo-persona-explicacion').textContent =
+      'Si tiene cuenta en la app, pon el mismo correo: así la reconocemos cuando te comparta un gasto.';
+    document.getElementById('correo-persona').value = persona.email ?? '';
+    dialogoCorreoPersona.showModal();
+    setTimeout(() => document.getElementById('correo-persona').focus(), 40);
+  }
+
+  function guardarCorreoPersona() {
+    const persona = personaPorId(correoPersonaEditando);
+    if (!persona) return false;
+
+    const correo = document.getElementById('correo-persona').value.trim();
+    mutar((d) => {
+      const fila = d.personas.find((p) => p.id === persona.id);
+      if (fila) fila.email = correo ? normalizarCorreo(correo) : null;
+    });
+
+    dialogoCorreoPersona.close();
+    correoPersonaEditando = null;
+    avisar(correo ? 'Correo guardado' : 'Correo quitado');
+    return true;
+  }
+
   /* ══ Registrar manualmente lo que le debes ═══════════════════════ */
 
   const dialogoDebo = document.getElementById('dialogo-debo');
@@ -2532,7 +2539,8 @@
     if (pestana) {
       if (pestana.dataset.vista !== 'personas') {
         agregandoPersona = false;
-        editandoCorreoPersona = null;
+        correoPersonaEditando = null;
+        dialogoCorreoPersona.close();
       }
       vista = pestana.dataset.vista;
       pintar();
@@ -2543,7 +2551,8 @@
     if (ir) {
       if (ir.dataset.ir !== 'personas') {
         agregandoPersona = false;
-        editandoCorreoPersona = null;
+        correoPersonaEditando = null;
+        dialogoCorreoPersona.close();
       }
       vista = ir.dataset.ir;
       pintar();
@@ -2565,21 +2574,7 @@
 
     const editarCorreoPersona = objetivo.closest('[data-editar-correo-persona]');
     if (editarCorreoPersona) {
-      editandoCorreoPersona = editarCorreoPersona.dataset.editarCorreoPersona;
-      pintar();
-      setTimeout(
-        () =>
-          document
-            .querySelector(`[data-correo-persona="${editandoCorreoPersona}"] [name="correo"]`)
-            ?.focus(),
-        40,
-      );
-      return;
-    }
-
-    if (objetivo.closest('[data-cancelar-correo-persona]')) {
-      editandoCorreoPersona = null;
-      pintar();
+      abrirCorreoPersona(editarCorreoPersona.dataset.editarCorreoPersona);
       return;
     }
 
@@ -3056,22 +3051,12 @@
     guardarDebo();
   });
 
-  document.addEventListener('submit', (evento) => {
-    const formaCorreo = evento.target.closest('[data-correo-persona]');
-    if (formaCorreo) {
-      evento.preventDefault();
-      const idPersona = formaCorreo.dataset.correoPersona;
-      const correo = formaCorreo.elements.correo.value.trim();
-      mutar((d) => {
-        const persona = d.personas.find((p) => p.id === idPersona);
-        if (!persona) return;
-        persona.email = correo ? normalizarCorreo(correo) : null;
-      });
-      editandoCorreoPersona = null;
-      avisar(correo ? 'Correo guardado' : 'Correo quitado');
-      return;
-    }
+  document.getElementById('forma-correo-persona').addEventListener('submit', (evento) => {
+    evento.preventDefault();
+    guardarCorreoPersona();
+  });
 
+  document.addEventListener('submit', (evento) => {
     const forma = evento.target.closest('[data-nueva-persona]');
     if (!forma) return;
     evento.preventDefault();

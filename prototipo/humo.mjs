@@ -133,18 +133,24 @@ comprobar(
   'el monto que te deben no se repite en la tarjeta de Ana',
   (tarjetaAna?.textContent.match(/Te debe/g) ?? []).length === 1,
 );
+comprobar('la tarjeta no muestra el correo en pantalla', !tarjetaAna?.textContent.includes('@'));
 
 const ana = guardado().personas.find((p) => p.name === 'Ana');
 comprobar('Ana todavía no tiene correo', !ana?.email);
 clic(`[data-editar-correo-persona="${ana.id}"]`);
-doc.querySelector(`[data-correo-persona="${ana.id}"] [name="correo"]`).value = 'ana@ejemplo.com';
-doc.querySelector(`[data-correo-persona="${ana.id}"]`).dispatchEvent(
+comprobar('el diálogo de correo se abre', doc.querySelector('#dialogo-correo-persona').open === true);
+doc.getElementById('correo-persona').value = 'ana@ejemplo.com';
+doc.querySelector('#forma-correo-persona').dispatchEvent(
   new window.Event('submit', { bubbles: true, cancelable: true }),
 );
 comprobar(
   'se puede asociar correo a una persona existente',
   guardado().personas.find((p) => p.id === ana.id)?.email === 'ana@ejemplo.com',
 );
+const tarjetaAnaActualizada = [...doc.querySelectorAll('#lienzo .persona')].find((n) =>
+  n.querySelector('.persona__nombre')?.textContent.includes('Ana'),
+);
+comprobar('el correo no queda visible en la tarjeta', !tarjetaAnaActualizada?.textContent.includes('@'));
 
 /* ── 5c. Registrar manualmente lo que le debes ─────────────────── */
 
