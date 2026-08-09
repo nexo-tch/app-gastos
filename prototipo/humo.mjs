@@ -1,0 +1,374 @@
+/**
+ * Prueba de humo del prototipo: carga `gastos.html` en un DOM simulado y
+ * recorre los caminos que se usan todos los días. No reemplaza probarlo a mano,
+ * pero atrapa el error que dejaría la pantalla en blanco.
+ */
+import { JSDOM, VirtualConsole } from 'jsdom';
+import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const raiz = dirname(fileURLToPath(import.meta.url));
+const html = await readFile(join(raiz, 'gastos.html'), 'utf8');
+
+const fallos = [];
+const consola = new VirtualConsole();
+consola.on('jsdomError', (error) => fallos.push(error.stack ?? String(error)));
+consola.on('error', (...args) => fallos.push(args.join(' ')));
+
+const dom = new JSDOM(html, {
+  url: 'http://localhost/',
+  runScripts: 'dangerously',
+  pretendToBeVisual: true,
+  virtualConsole: consola,
+  beforeParse(window) {
+    // jsdom no implementa diálogos modales ni los avisos del navegador.
+    const dialogo = window.HTMLDialogElement?.prototype;
+    if (dialogo) {
+      dialogo.showModal = function () {
+        this.open = true;
+      };
+      dialogo.close = function () {
+        this.open = false;
+      };
+    }
+    window.confirm = () => true;
+    window.prompt = () => 'Invitado';
+    window.addEventListener('error', (evento) => fallos.push(evento.error?.stack ?? evento.message));
+  },
+});
+
+const { window } = dom;
+const doc = window.document;
+
+const clic = (selector) => {
+  const nodo = doc.querySelector(selector);
+  if (!nodo) throw new Error(`No existe ${selector}`);
+  nodo.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+};
+
+const escribir = (selector, valor, tipo = 'input') => {
+  const nodo = doc.querySelector(selector);
+  if (!nodo) throw new Error(`No existe ${selector}`);
+  nodo.value = valor;
+  nodo.dispatchEvent(new window.Event(tipo, { bubbles: true }));
+};
+
+const texto = (selector) => doc.querySelector(selector)?.textContent.replace(/\s+/g, ' ').trim() ?? '';
+
+const pruebas = [];
+const comprobar = (nombre, condicion, detalle = '') => {
+  pruebas.push({ nombre, bien: Boolean(condicion), detalle });
+};
+
+/* ── 1. Arranca en limpio ───────────────────────────────────────── */
+
+comprobar('la cabecera dibuja el tablero', texto('#tablero').length > 0);
+comprobar('sin datos invita a registrar', texto('#lienzo').includes('Todavía no hay nada'));
+
+/* ── 2. Datos de ejemplo ────────────────────────────────────────── */
+
+clic('#datos-ejemplo');
+
+const guardado = () => JSON.parse(window.localStorage.getItem('gastos.prototipo.v1'));
+
+comprobar('crea gastos de ejemplo', guardado().gastos.length === 10, `${guardado().gastos.length}`);
+comprobar('crea dos personas', guardado().personas.length === 2);
+comprobar('crea dos gastos fijos', guardado().fijos.length === 2);
+comprobar(
+  'reserva los fijos del mes desde el día 1',
+  guardado().instancias.filter((i) => i.status === 'planned').length === 2,
+);
+comprobar('el tablero muestra lo que queda', texto('#tablero').includes('Te queda para el mes'));
+comprobar('la barra marca el día de hoy', doc.querySelector('.barra__hoy') !== null);
+comprobar('aparece el desglose por categoría', texto('#lienzo').includes('En qué se te va'));
+comprobar('aparece quién te debe', texto('#lienzo').includes('Ana'));
+
+/* ── 3. El presupuesto solo cuenta mi parte ─────────────────────── */
+
+const datos = guardado();
+const totalRegistrado = datos.gastos.reduce((s, g) => s + g.amountTotalCents, 0);
+const miParte = datos.gastos.reduce((s, g) => s + g.myShareCents, 0);
+comprobar('mi parte es menor que el total registrado', miParte < totalRegistrado);
+
+/* ── 4. Registrar un gasto compartido ───────────────────────────── */
+
+clic('[data-abrir="gasto"]');
+comprobar('el diálogo de gasto se abre', doc.querySelector('#dialogo-gasto').open === true);
+
+escribir('#gasto-monto', '60000');
+clic('[data-categoria="mercado"]');
+escribir('#gasto-comercio', 'Carulla');
+
+const fichasPersona = doc.querySelectorAll('#gasto-personas [data-persona]');
+comprobar('las personas aparecen como fichas', fichasPersona.length === 2);
+
+fichasPersona[0].dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+
+comprobar(
+  'en partes iguales el gasto se divide entre dos',
+  texto('#reparto-resultado').includes('30.000'),
+  texto('#reparto-resultado'),
+);
+
+doc.querySelector('#forma-gasto').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+
+comprobar('el gasto queda guardado', guardado().gastos.length === 11);
+comprobar('queda un reparto nuevo', guardado().repartos.length > datos.repartos.length);
+
+const ultimo = guardado().gastos.at(-1);
+comprobar('guarda el total completo', ultimo.amountTotalCents === 6000000, String(ultimo.amountTotalCents));
+comprobar('guarda solo mi parte aparte', ultimo.myShareCents === 3000000, String(ultimo.myShareCents));
+
+/* ── 5. Cobrar: un abono se reparte del más viejo al más nuevo ──── */
+
+clic('.pestana[data-vista="personas"]');
+comprobar('la vista de personas lista a Ana', texto('#lienzo').includes('Ana'));
+
+clic('[data-abonar]');
+comprobar('el diálogo de abono se abre', doc.querySelector('#dialogo-abono').open === true);
+
+escribir('#abono-monto', '20000');
+comprobar('propone cómo aplicar el abono', texto('#abono-reparto').includes('Se aplica así'));
+
+doc.querySelector('#forma-abono').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+
+comprobar('el abono queda registrado', guardado().abonos.length === 1);
+comprobar('el abono se asigna a gastos concretos', guardado().asignaciones.length > 0);
+
+/* ── 6. Presupuesto y fijos ─────────────────────────────────────── */
+
+clic('.pestana[data-vista="presupuesto"]');
+comprobar('el tope del mes se puede editar', doc.querySelector('[data-presupuesto-total]') !== null);
+
+escribir('[data-tope="ropa"]', '200.000', 'change');
+comprobar('el tope por categoría se guarda', guardado().presupuestos[mesActual()].limites.ropa === 20000000);
+
+/* ── 6b. Crear, editar, quitar y restaurar categorías ───────────── */
+
+const cuantasCategorias = () => guardado().categorias.length;
+const antesDeCrear = cuantasCategorias();
+
+clic('[data-abrir="categoria"]');
+comprobar('el diálogo de categoría se abre', doc.querySelector('#dialogo-categoria').open === true);
+comprobar('ofrece una paleta de colores', doc.querySelectorAll('#categoria-colores .color').length > 5);
+
+escribir('#categoria-nombre', 'Gimnasio');
+
+// El color se lee de la muestra que se toca, no se escribe aquí: la paleta es
+// del motor y esta prueba es sobre "guarda el que elegiste", no sobre cuál es.
+const muestra = doc.querySelectorAll('#categoria-colores .color')[3];
+const colorElegido = muestra.dataset.color;
+muestra.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+
+doc.querySelector('#forma-categoria').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+
+comprobar('la categoría nueva se guarda', cuantasCategorias() === antesDeCrear + 1);
+const gimnasio = guardado().categorias.at(-1);
+comprobar('respeta el color elegido', gimnasio.color === colorElegido, gimnasio.color);
+comprobar('la categoría nueva aparece en la lista', texto('#lienzo').includes('Gimnasio'));
+
+clic('[data-abrir="categoria"]');
+escribir('#categoria-nombre', 'Mercado');
+doc.querySelector('#forma-categoria').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+comprobar('no deja repetir el nombre de otra categoría', cuantasCategorias() === antesDeCrear + 1);
+
+clic(`[data-editar-categoria="${gimnasio.id}"]`);
+escribir('#categoria-nombre', 'Gimnasio y deporte');
+doc.querySelector('#forma-categoria').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+comprobar(
+  'renombrar una categoría no crea otra',
+  cuantasCategorias() === antesDeCrear + 1 &&
+    guardado().categorias.find((c) => c.id === gimnasio.id).name === 'Gimnasio y deporte',
+);
+
+clic(`[data-borrar-categoria="${gimnasio.id}"]`);
+comprobar('una categoría sin gastos se elimina de verdad', cuantasCategorias() === antesDeCrear);
+
+clic('[data-borrar-categoria="mercado"]');
+const mercado = guardado().categorias.find((c) => c.id === 'mercado');
+comprobar('una categoría con gastos se guarda, no se borra', mercado.isArchived === true);
+comprobar(
+  'los gastos de esa categoría siguen ahí',
+  guardado().gastos.some((g) => g.categoryId === 'mercado' && !g.deletedAt),
+);
+comprobar('deja de aparecer entre las editables', !texto('#lienzo').includes('Tope de Mercado'));
+
+clic('[data-restaurar-categoria="mercado"]');
+comprobar(
+  'restaurarla la devuelve a la lista',
+  guardado().categorias.find((c) => c.id === 'mercado').isArchived === false,
+);
+
+clic('.pestana[data-vista="fijos"]');
+comprobar('los fijos del mes se listan', texto('#lienzo').includes('Arriendo'));
+
+const antesDePagar = guardado().gastos.length;
+clic('[data-pagar]');
+comprobar('pagar un fijo crea el gasto', guardado().gastos.length === antesDePagar + 1);
+comprobar(
+  'el fijo pagado deja de estar reservado',
+  guardado().instancias.filter((i) => i.status === 'planned').length === 1,
+);
+
+/* ── 7. Fijos que no caben en el mes ────────────────────────────── */
+
+clic('.pestana[data-vista="presupuesto"]');
+
+// Un techo que alcanza para lo ya gastado pero no para los fijos que faltan.
+const estado = guardado();
+const gastadoDelMes = estado.gastos
+  .filter((g) => !g.deletedAt)
+  .reduce((suma, g) => suma + g.myShareCents, 0);
+const reservadoEnFijos = estado.instancias
+  .filter((i) => i.status === 'planned')
+  .reduce((suma, i) => suma + i.plannedCents, 0);
+
+const enPesos = (centavos) => new Intl.NumberFormat('es-CO').format(Math.round(centavos / 100));
+
+comprobar('el ejemplo deja fijos sin pagar', reservadoEnFijos > 0);
+escribir('[data-presupuesto-total]', enPesos(gastadoDelMes + reservadoEnFijos / 2), 'change');
+
+comprobar(
+  'no dice que te pasaste si no has gastado de más',
+  !texto('#tablero').includes('Te pasaste por'),
+  texto('#tablero').slice(0, 60),
+);
+comprobar('avisa que los fijos no caben', texto('#tablero').includes('Te faltan para los fijos'));
+comprobar(
+  'explica cómo arreglarlo',
+  texto('#tablero').includes('no caben en los') && texto('#tablero').includes('ajusta algún fijo'),
+);
+
+// El otro extremo: gastar de verdad más de lo que hay sí debe decir "te pasaste".
+escribir('[data-presupuesto-total]', enPesos(gastadoDelMes / 2), 'change');
+comprobar('gastar de más sí se llama gastar de más', texto('#tablero').includes('Te pasaste por'));
+
+escribir('[data-presupuesto-total]', enPesos(gastadoDelMes + reservadoEnFijos * 2), 'change');
+comprobar('con plata suficiente vuelve a lo normal', texto('#tablero').includes('Te queda para el mes'));
+
+/* ── 8. Un fijo con tope en su categoría no se cuenta dos veces ─── */
+
+clic('.pestana[data-vista="presupuesto"]');
+escribir('[data-tope="servicios"]', '300.000', 'change');
+clic('.pestana[data-vista="resumen"]');
+
+/** La fila de Servicios en el desglose "En qué se te va". */
+const filaServicios = () => {
+  const fila = [...doc.querySelectorAll('#lienzo .categoria')].find((n) =>
+    n.textContent.includes('Servicios'),
+  );
+  return fila ? fila.textContent.replace(/\s+/g, ' ').trim() : '(no aparece)';
+};
+
+comprobar(
+  'el fijo reservado consume el tope de su categoría',
+  filaServicios().includes('$ 220.000 / $ 300.000'),
+  filaServicios(),
+);
+
+clic('.pestana[data-vista="fijos"]');
+clic('[data-pagar]');
+clic('.pestana[data-vista="resumen"]');
+
+comprobar(
+  'al pagarlo pasa de reservado a gastado, no se suma dos veces',
+  filaServicios().includes('$ 220.000 / $ 300.000'),
+  filaServicios(),
+);
+comprobar(
+  'y deja de estar reservado',
+  guardado().instancias.every((i) => i.status !== 'planned'),
+);
+
+/* ── 9. Navegar entre meses ─────────────────────────────────────── */
+
+clic('.pestana[data-vista="resumen"]');
+clic('[data-mes="-1"]');
+comprobar('el mes anterior está vacío', texto('#lienzo').includes('Todavía no hay nada'));
+comprobar(
+  'un mes que ya pasó no reserva gastos fijos',
+  guardado().instancias.every((i) => i.month >= mesActual()),
+);
+clic('[data-mes="1"]');
+comprobar('vuelve al mes actual', texto('#tablero').includes('Te queda para el mes'));
+
+function mesActual() {
+  const fecha = new Date(Date.now() - 5 * 60 * 60 * 1000);
+  return `${fecha.getUTCFullYear()}-${String(fecha.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/* ── 10. La pantalla de entrada ─────────────────────────────────── */
+
+await revisarEntrada();
+
+/**
+ * Es la unica pantalla que puede dejar a alguien fuera de sus datos, y su
+ * fallo natural es silencioso: un aviso que se pinta y se borra solo no se ve
+ * en ninguna captura.
+ */
+async function revisarEntrada() {
+  const portada = await readFile(join(raiz, '..', 'apps', 'web', 'public', 'entrar.html'), 'utf8');
+
+  const ventana = new JSDOM(portada, {
+    url: 'http://localhost/entrar?crear',
+    runScripts: 'dangerously',
+    virtualConsole: consola,
+    beforeParse(window) {
+      // El servidor dice que no, que es justo cuando el aviso importa.
+      window.fetch = async () => ({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: 'Ese correo y esa clave no coinciden.' }),
+      });
+    },
+  }).window;
+
+  const dentro = ventana.document;
+
+  comprobar('al crear cuenta el cursor empieza en el nombre', dentro.activeElement?.id === 'nombre');
+
+  dentro.getElementById('cambiar').click();
+  comprobar('cambiar a entrar esconde el nombre', dentro.getElementById('campo-nombre').hidden);
+  comprobar('y mueve el cursor al correo', dentro.activeElement?.id === 'correo');
+
+  dentro.getElementById('correo').value = 'quien@ejemplo.com';
+  dentro.getElementById('clave').value = 'la que no es';
+  dentro.getElementById('forma').dispatchEvent(new ventana.Event('submit', { bubbles: true, cancelable: true }));
+
+  // La respuesta y el repintado del boton pasan en microtareas encadenadas.
+  await new Promise((listo) => setTimeout(listo, 0));
+
+  const aviso = dentro.getElementById('error');
+  comprobar('el motivo del rechazo se queda en pantalla', !aviso.hidden, aviso.textContent);
+  comprobar('el botón vuelve a poder pulsarse', !dentro.getElementById('enviar').disabled);
+
+  ventana.close();
+}
+
+/* ── Resultado ──────────────────────────────────────────────────── */
+
+const malas = pruebas.filter((p) => !p.bien);
+
+for (const prueba of pruebas) {
+  console.log(`${prueba.bien ? '  ok  ' : ' FALLA'}  ${prueba.nombre}${prueba.detalle ? ` → ${prueba.detalle}` : ''}`);
+}
+
+if (fallos.length > 0) {
+  console.log('\nErrores en la consola del navegador:');
+  for (const fallo of fallos) console.log(`  ${fallo}`);
+}
+
+console.log(`\n${pruebas.length - malas.length}/${pruebas.length} comprobaciones pasan.`);
+
+if (malas.length > 0 || fallos.length > 0) process.exit(1);

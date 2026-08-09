@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Entrar · Gastos</title>
+
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)" />
+    <meta name="robots" content="noindex" />
+
+    <link rel="icon" href="/icono.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icono-180.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /*__ESTILOS__*/
+    </style>
+  </head>
+
+  <body>
+    <main class="portada">
+      <div class="portada__caja">
+        <div class="portada__marca">
+          <span class="marca__punto" aria-hidden="true"></span>
+          Gastos
+        </div>
+
+        <p class="portada__lema">
+          Cuánto te queda este mes, en qué se te va y quién te debe. Tu cuenta es tuya: nadie más
+          ve lo que registras.
+        </p>
+
+        <form class="portada__tarjeta" id="forma" novalidate>
+          <p class="portada__error" id="error" hidden></p>
+
+          <label class="campo" id="campo-nombre" hidden>
+            <span class="campo__etiqueta">Cómo te llamas</span>
+            <input class="entrada" id="nombre" name="nombre" autocomplete="name" maxlength="80" />
+          </label>
+
+          <label class="campo">
+            <span class="campo__etiqueta">Correo</span>
+            <input
+              class="entrada"
+              id="correo"
+              name="correo"
+              type="email"
+              autocomplete="email"
+              inputmode="email"
+              autocapitalize="off"
+              spellcheck="false"
+              required
+            />
+          </label>
+
+          <label class="campo">
+            <span class="campo__etiqueta">Contraseña</span>
+            <input
+              class="entrada"
+              id="clave"
+              name="clave"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+            <span class="pista" id="pista-clave" hidden>Mínimo 8 caracteres.</span>
+          </label>
+
+          <button type="submit" class="boton boton--solido" id="enviar">Entrar</button>
+        </form>
+
+        <p class="portada__cambio">
+          <span id="pregunta">¿Todavía no tienes cuenta?</span>
+          <button type="button" class="enlace" id="cambiar">Crear una</button>
+        </p>
+      </div>
+    </main>
+
+    <script>
+      /*__ENTRAR__*/
+    </script>
+  </body>
+</html>

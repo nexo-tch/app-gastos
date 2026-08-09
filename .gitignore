@@ -1,0 +1,29 @@
+node_modules/
+dist/
+.turbo/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# La base de datos de desarrollo: PGlite guarda aqui su Postgres local
+.datos/
+
+# Home aislado que crea el entorno del agente. Guarda sesiones y cachés
+# de herramientas, nada que pertenezca al proyecto.
+.tmp-home/
+
+# Todo esto lo escribe prototipo/construir.mjs en cada compilación
+prototipo/gastos.html
+prototipo/.vista/
+apps/web/public/
+
+# Sistema
+.DS_Store
+*.log
+npm-debug.log*

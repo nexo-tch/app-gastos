@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Gastos</title>
+
+    <meta name="color-scheme" content="light dark" />
+    <!-- El navegador pinta su barra del color del fondo, en los dos temas. -->
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)" />
+
+    <link rel="manifest" href="/gastos.webmanifest" />
+    <link rel="icon" href="/icono.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icono-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Gastos" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /*__ESTILOS__*/
+    </style>
+  </head>
+
+  <body>
+    <header class="cabecera">
+      <div class="cabecera__barra">
+        <div class="marca">
+          <span class="marca__punto" aria-hidden="true"></span>
+          <span>Gastos</span>
+        </div>
+
+        <div class="mes" role="group" aria-label="Mes que estás viendo">
+          <button type="button" class="mes__paso" data-mes="-1" aria-label="Mes anterior">‹</button>
+          <span class="mes__nombre" id="mes-nombre">—</span>
+          <button type="button" class="mes__paso" data-mes="1" aria-label="Mes siguiente">›</button>
+        </div>
+
+        <div class="cabecera__acciones">
+          <button type="button" class="boton boton--fantasma" data-abrir="datos">Datos</button>
+          <button type="button" class="boton boton--solido" data-abrir="gasto">Registrar gasto</button>
+        </div>
+      </div>
+
+      <div class="tablero" id="tablero">
+        <div class="tablero__caja" id="tablero-caja"></div>
+      </div>
+
+      <nav class="pestanas" id="pestanas" aria-label="Secciones">
+        <button type="button" class="pestana" data-vista="resumen" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+               stroke-linecap="round" aria-hidden="true">
+            <path d="M4 20V11M9.3 20V4M14.7 20v-6M20 20V8" />
+          </svg>
+          <span>Resumen</span>
+        </button>
+        <button type="button" class="pestana" data-vista="gastos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" />
+            <path d="M9.5 8.5h5M9.5 12.5h5" />
+          </svg>
+          <span>Gastos</span>
+        </button>
+        <button type="button" class="pestana" data-vista="presupuesto">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3.5 18a8.5 8.5 0 1 1 17 0" />
+            <path d="M12 18l4.2-5.2" />
+          </svg>
+          <span>Presupuesto</span>
+        </button>
+        <button type="button" class="pestana" data-vista="personas">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="9" cy="8" r="3.3" />
+            <path d="M3.4 19.2a5.6 5.6 0 0 1 11.2 0" />
+            <path d="M16.2 5.2a3.3 3.3 0 0 1 0 5.6M17.6 14.4a5.6 5.6 0 0 1 3 4.8" />
+          </svg>
+          <span>Personas</span>
+        </button>
+        <button type="button" class="pestana" data-vista="fijos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3.4" y="5" width="17.2" height="15.6" rx="2.6" />
+            <path d="M8 3v4M16 3v4M3.4 10.2h17.2" />
+          </svg>
+          <span>Fijos</span>
+        </button>
+      </nav>
+    </header>
+
+    <main class="lienzo" id="lienzo" tabindex="-1"></main>
+
+    <button type="button" class="flotante" data-abrir="gasto" aria-label="Registrar gasto">
+      <span aria-hidden="true">+</span>
+    </button>
+
+    <!-- Registrar o editar un gasto -->
+    <dialog class="hoja" id="dialogo-gasto" aria-labelledby="titulo-gasto">
+      <form method="dialog" class="hoja__forma" id="forma-gasto">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-gasto">Registrar gasto</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="hoja__cuerpo">
+          <label class="campo campo--monto">
+            <span class="campo__etiqueta">Cuánto</span>
+            <div class="monto">
+              <span class="monto__signo" aria-hidden="true">$</span>
+              <input
+                class="monto__entrada"
+                id="gasto-monto"
+                name="monto"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="0"
+                required
+              />
+            </div>
+          </label>
+
+          <fieldset class="campo">
+            <legend class="campo__etiqueta">En qué</legend>
+            <div class="rejilla-categorias" id="gasto-categorias"></div>
+          </fieldset>
+
+          <div class="pareja">
+            <label class="campo">
+              <span class="campo__etiqueta">Dónde</span>
+              <input
+                class="entrada"
+                id="gasto-comercio"
+                name="comercio"
+                list="comercios-vistos"
+                autocomplete="off"
+                placeholder="Éxito, Uber, arriendo…"
+              />
+              <datalist id="comercios-vistos"></datalist>
+            </label>
+
+            <label class="campo">
+              <span class="campo__etiqueta">Cuándo</span>
+              <input class="entrada" id="gasto-fecha" name="fecha" type="date" required />
+            </label>
+          </div>
+
+          <label class="campo">
+            <span class="campo__etiqueta">Con qué pagaste</span>
+            <select class="entrada" id="gasto-cuenta" name="cuenta"></select>
+          </label>
+
+          <section class="reparto">
+            <div class="reparto__cabeza">
+              <span class="campo__etiqueta">Con quién lo compartes</span>
+              <span class="pista" id="reparto-pista">Nadie más: el gasto es todo tuyo</span>
+            </div>
+
+            <div class="fichas" id="gasto-personas"></div>
+
+            <div class="reparto__modo" id="reparto-modo" hidden>
+              <div class="segmentos" role="group" aria-label="Cómo se reparte">
+                <button type="button" class="segmento" data-modo="equal" aria-pressed="true">
+                  Partes iguales
+                </button>
+                <button type="button" class="segmento" data-modo="percent" aria-pressed="false">
+                  Porcentaje
+                </button>
+                <button type="button" class="segmento" data-modo="amounts" aria-pressed="false">
+                  Montos
+                </button>
+              </div>
+
+              <label class="interruptor">
+                <input type="checkbox" id="gasto-incluirme" checked />
+                <span>Yo también consumí</span>
+              </label>
+
+              <div class="reparto__detalle" id="reparto-detalle"></div>
+              <p class="reparto__resultado" id="reparto-resultado"></p>
+            </div>
+          </section>
+        </div>
+
+        <div class="hoja__pie">
+          <button type="button" class="boton boton--peligro" id="gasto-eliminar" hidden>Eliminar</button>
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Cancelar</button>
+          <button type="submit" class="boton boton--solido" id="gasto-guardar">Guardar gasto</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Registrar un abono de una persona -->
+    <dialog class="hoja hoja--angosta" id="dialogo-abono" aria-labelledby="titulo-abono">
+      <form method="dialog" class="hoja__forma" id="forma-abono">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-abono">Registrar abono</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="hoja__cuerpo">
+          <p class="pista" id="abono-contexto"></p>
+
+          <label class="campo campo--monto">
+            <span class="campo__etiqueta">Cuánto te pagó</span>
+            <div class="monto">
+              <span class="monto__signo" aria-hidden="true">$</span>
+              <input
+                class="monto__entrada"
+                id="abono-monto"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="0"
+                required
+              />
+            </div>
+          </label>
+
+          <label class="campo">
+            <span class="campo__etiqueta">Cuándo</span>
+            <input class="entrada" id="abono-fecha" type="date" required />
+          </label>
+
+          <div class="reparto__detalle" id="abono-reparto"></div>
+        </div>
+
+        <div class="hoja__pie">
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Cancelar</button>
+          <button type="submit" class="boton boton--solido">Registrar abono</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Crear o editar un gasto fijo -->
+    <dialog class="hoja hoja--angosta" id="dialogo-fijo" aria-labelledby="titulo-fijo">
+      <form method="dialog" class="hoja__forma" id="forma-fijo">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-fijo">Nuevo gasto fijo</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="hoja__cuerpo">
+          <label class="campo">
+            <span class="campo__etiqueta">Nombre</span>
+            <input class="entrada" id="fijo-nombre" placeholder="Arriendo, Netflix, luz…" required />
+          </label>
+
+          <label class="campo campo--monto">
+            <span class="campo__etiqueta">Cuánto reservar cada mes</span>
+            <div class="monto">
+              <span class="monto__signo" aria-hidden="true">$</span>
+              <input
+                class="monto__entrada"
+                id="fijo-monto"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="0"
+                required
+              />
+            </div>
+          </label>
+
+          <div class="pareja">
+            <label class="campo">
+              <span class="campo__etiqueta">Categoría</span>
+              <select class="entrada" id="fijo-categoria"></select>
+            </label>
+
+            <label class="campo">
+              <span class="campo__etiqueta">Día del mes</span>
+              <input class="entrada" id="fijo-dia" type="number" min="1" max="31" value="1" required />
+            </label>
+          </div>
+
+          <label class="interruptor">
+            <input type="checkbox" id="fijo-variable" />
+            <span>El monto cambia cada mes (luz, agua, gas)</span>
+          </label>
+        </div>
+
+        <div class="hoja__pie">
+          <button type="button" class="boton boton--peligro" id="fijo-eliminar" hidden>Eliminar</button>
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Cancelar</button>
+          <button type="submit" class="boton boton--solido">Guardar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Crear o editar una categoría -->
+    <dialog class="hoja hoja--angosta" id="dialogo-categoria" aria-labelledby="titulo-categoria">
+      <form method="dialog" class="hoja__forma" id="forma-categoria">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-categoria">Nueva categoría</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="hoja__cuerpo">
+          <label class="campo">
+            <span class="campo__etiqueta">Nombre</span>
+            <input
+              class="entrada"
+              id="categoria-nombre"
+              placeholder="Gimnasio, regalos, viajes…"
+              maxlength="28"
+              required
+            />
+          </label>
+
+          <fieldset class="campo">
+            <legend class="campo__etiqueta">Color</legend>
+            <div class="colores" id="categoria-colores"></div>
+          </fieldset>
+        </div>
+
+        <div class="hoja__pie">
+          <button type="button" class="boton boton--peligro" id="categoria-eliminar" hidden>Eliminar</button>
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Cancelar</button>
+          <button type="submit" class="boton boton--solido">Guardar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Tu cuenta y tus datos -->
+    <dialog class="hoja hoja--angosta" id="dialogo-datos" aria-labelledby="titulo-datos">
+      <div class="hoja__forma">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-datos">Tus datos</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="hoja__cuerpo">
+          <div class="persona__cabeza" id="cuenta-actual" hidden>
+            <span class="avatar" id="cuenta-inicial">?</span>
+            <span class="persona__nombre" id="cuenta-nombre"></span>
+            <button type="button" class="boton boton--marco boton--chico" id="cuenta-salir">
+              Cerrar sesión
+            </button>
+          </div>
+
+          <p class="pista" id="datos-explicacion">
+            Todo se guarda en tu cuenta y este navegador conserva una copia, así que la app funciona
+            sin señal y sube los cambios cuando vuelve.
+          </p>
+
+          <div class="pila">
+            <button type="button" class="boton boton--marco" id="datos-exportar">Descargar copia</button>
+            <button type="button" class="boton boton--marco" id="datos-importar">Cargar una copia</button>
+            <button type="button" class="boton boton--marco" id="datos-ejemplo">
+              Llenar con datos de ejemplo
+            </button>
+            <button type="button" class="boton boton--peligro" id="datos-borrar">Borrar todo</button>
+          </div>
+
+          <input type="file" id="datos-archivo" accept="application/json" hidden />
+        </div>
+      </div>
+    </dialog>
+
+    <div class="avisos" id="avisos" role="status" aria-live="polite"></div>
+
+    <script>
+      /*__MOTOR__*/
+    </script>
+    <script>
+      /*__APP__*/
+    </script>
+  </body>
+</html>
