@@ -1364,21 +1364,17 @@
   }
 
   function filaDeudaCobrar(item, persona) {
+    const titulo = `${escapar(nombreDelGasto(item.expenseId, nombreCategoria(item.categoryId)))} · ${escapar(nombreDia(diaDeIso(item.occurredAt)))}`;
     return `
       <div class="deuda ${item.isSettled ? 'deuda--saldada' : ''}">
-        <span class="deuda__que">${escapar(nombreDelGasto(item.expenseId, nombreCategoria(item.categoryId)))}
-          · ${escapar(nombreDia(diaDeIso(item.occurredAt)))}</span>
-        <span class="deuda__cuanto">${plata(item.pendingCents || item.amountCents)}</span>
+        <button type="button" class="deuda__principal" data-gasto="${item.expenseId}">
+          <span class="deuda__que">${titulo}</span>
+          <span class="deuda__cuanto">${plata(item.pendingCents || item.amountCents)}</span>
+        </button>
         ${
           item.isSettled
             ? ''
-            : `<button type="button" class="boton boton--fantasma boton--chico" data-gasto="${item.expenseId}">
-                 Editar
-               </button>
-               <button type="button" class="boton boton--fantasma boton--chico" data-quitar-reparto="${item.splitId}">
-                 Quitar
-               </button>
-               <button type="button" class="boton boton--fantasma boton--chico"
+            : `<button type="button" class="boton boton--fantasma boton--chico"
                        data-avisar="${item.splitId}"
                        aria-label="Avisarle a ${escapar(persona.name)}">Avisar</button>`
         }
@@ -1386,16 +1382,12 @@
   }
 
   function filaDeudaPagar(deuda) {
+    const titulo = `${escapar(deuda.description || 'un gasto')} · ${escapar(nombreDia(diaDeIso(deuda.occurredAt)))}`;
     return `
       <div class="deuda ${deuda.settledAt ? 'deuda--saldada' : ''}">
-        <span class="deuda__que">${escapar(deuda.description || 'un gasto')}
-          · ${escapar(nombreDia(diaDeIso(deuda.occurredAt)))}</span>
-        <span class="deuda__cuanto">${plata(deuda.amountCents)}</span>
-        <button type="button" class="boton boton--fantasma boton--chico" data-editar-deuda="${deuda.id}">
-          Editar
-        </button>
-        <button type="button" class="boton boton--fantasma boton--chico" data-borrar-deuda="${deuda.id}">
-          Quitar
+        <button type="button" class="deuda__principal" data-deuda="${deuda.id}">
+          <span class="deuda__que">${titulo}</span>
+          <span class="deuda__cuanto">${plata(deuda.amountCents)}</span>
         </button>
         <button type="button" class="boton boton--fantasma boton--chico" data-pague="${deuda.id}">
           ${deuda.settledAt ? 'Deshacer' : 'Pagué'}
@@ -2207,6 +2199,9 @@
 
     categoriaDebo = gasto?.categoryId ?? categoriasActivas()[0]?.id ?? null;
     document.getElementById('titulo-debo').textContent = deuda ? 'Editar deuda' : 'Registrar deuda';
+    document.getElementById('debo-guardar').textContent = deuda ? 'Guardar cambios' : 'Registrar';
+    document.getElementById('debo-eliminar').hidden = !deuda;
+    document.getElementById('debo-pista').hidden = Boolean(deuda);
     document.getElementById('debo-persona').innerHTML = datos.personas
       .map(
         (p) =>
@@ -2683,6 +2678,12 @@
       return;
     }
 
+    const verDeuda = objetivo.closest('[data-deuda]');
+    if (verDeuda) {
+      abrirDebo(null, verDeuda.dataset.deuda);
+      return;
+    }
+
     const fichaCategoria = objetivo.closest('[data-categoria]');
     if (fichaCategoria) {
       borrador.categoriaId = fichaCategoria.dataset.categoria;
@@ -2780,21 +2781,10 @@
       return;
     }
 
-    const editarDeuda = objetivo.closest('[data-editar-deuda]');
-    if (editarDeuda) {
-      abrirDebo(null, editarDeuda.dataset.editarDeuda);
-      return;
-    }
-
-    const borrarDeudaBtn = objetivo.closest('[data-borrar-deuda]');
-    if (borrarDeudaBtn) {
-      borrarDeuda(borrarDeudaBtn.dataset.borrarDeuda);
-      return;
-    }
-
-    const quitarRepartoBtn = objetivo.closest('[data-quitar-reparto]');
-    if (quitarRepartoBtn) {
-      quitarReparto(quitarRepartoBtn.dataset.quitarReparto);
+    if (objetivo.closest('#debo-eliminar')) {
+      if (!deudaEditando) return;
+      borrarDeuda(deudaEditando);
+      dialogoDebo.close();
       return;
     }
 

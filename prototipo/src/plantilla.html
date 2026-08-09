@@ -323,7 +323,7 @@
         </div>
 
         <div class="hoja__cuerpo">
-          <p class="pista">
+          <p class="pista" id="debo-pista">
             Cuando alguien pagó por ti y no usa la app, anótalo aquí. Entra en tu presupuesto
             y queda apuntado que se lo debes.
           </p>
@@ -365,9 +365,10 @@
         </div>
 
         <div class="hoja__pie">
+          <button type="button" class="boton boton--peligro" id="debo-eliminar" hidden>Eliminar</button>
           <span class="hoja__espaciador"></span>
           <button type="button" class="boton boton--fantasma" data-cerrar>Cancelar</button>
-          <button type="submit" class="boton boton--solido">Registrar</button>
+          <button type="submit" class="boton boton--solido" id="debo-guardar">Registrar</button>
         </div>
       </form>
     </dialog>

@@ -173,8 +173,8 @@ comprobar(
 );
 
 const deudaHamburguesa = guardado().deudas.find((d) => d.description === 'Hamburguesa');
-clic(`[data-editar-deuda="${deudaHamburguesa.id}"]`);
-comprobar('se puede editar una deuda manual', doc.querySelector('#dialogo-debo').open === true);
+clic(`[data-deuda="${deudaHamburguesa.id}"]`);
+comprobar('se puede abrir una deuda manual', doc.querySelector('#dialogo-debo').open === true);
 escribir('#debo-monto', '30000');
 doc.querySelector('#forma-debo').dispatchEvent(
   new window.Event('submit', { bubbles: true, cancelable: true }),
@@ -205,7 +205,8 @@ comprobar('el resumen lista lo que debes', texto('#lienzo').includes('Debes'));
 comprobar('el tablero muestra cuánto debes', texto('#tablero').includes('Yo debo'));
 
 clic('.pestana[data-vista="personas"]');
-clic(`[data-borrar-deuda="${deudaHamburguesa.id}"]`);
+clic(`[data-deuda="${deudaHamburguesa.id}"]`);
+clic('#debo-eliminar');
 comprobar('se puede quitar una deuda manual', !guardado().deudas.some((d) => d.id === deudaHamburguesa.id));
 
 clic('[data-abonar]');
