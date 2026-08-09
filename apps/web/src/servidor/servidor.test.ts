@@ -13,7 +13,7 @@ import { RevisionVieja, aplicarCambios, cambiosSchema, leerEstado } from './esta
 import { borrarSesion, nuevaSesion, usuarioDeToken } from './sesion.js';
 
 beforeAll(async () => {
-  delete process.env.DATABASE_URL;
+  delete process.env.DATABASE_APP_GASTOS_URL;
   process.env.PGLITE_DIR = 'memory://';
   reiniciarConexion();
   await base();

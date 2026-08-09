@@ -20,9 +20,9 @@ export { esquema };
 let conexion: Promise<Base> | null = null;
 
 /**
- * Con `DATABASE_URL` se conecta al Postgres de produccion; sin ella levanta
- * PGlite, que es Postgres compilado a WebAssembly y vive en una carpeta local.
- * No hay que instalar ni levantar nada para trabajar.
+ * Con `DATABASE_APP_GASTOS_URL` se conecta al Postgres de produccion; sin
+ * ella levanta PGlite, que es Postgres compilado a WebAssembly y vive en una
+ * carpeta local. No hay que instalar ni levantar nada para trabajar.
  */
 export function base(): Promise<Base> {
   conexion ??= conectar();
@@ -35,7 +35,7 @@ export function reiniciarConexion(): void {
 }
 
 async function conectar(): Promise<Base> {
-  const url = process.env.DATABASE_URL?.trim();
+  const url = process.env.DATABASE_APP_GASTOS_URL?.trim();
   let db: Base;
 
   if (url) {
