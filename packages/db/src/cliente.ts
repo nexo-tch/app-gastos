@@ -20,14 +20,15 @@ export { esquema };
 let conexion: Promise<Base> | null = null;
 
 /**
- * Con `GASTOS_DATABASE_URL` se conecta al Postgres de produccion; sin ella
- * levanta PGlite, que es Postgres compilado a WebAssembly y vive en una
+ * Con `GASTOS_DATABASE_DATABASE_URL` se conecta al Postgres de produccion; sin
+ * ella levanta PGlite, que es Postgres compilado a WebAssembly y vive en una
  * carpeta local. No hay que instalar ni levantar nada para trabajar.
  *
- * El nombre lo decide el proveedor: la integracion de Neon con Vercel escribe
- * `<PREFIJO>_DATABASE_URL`, y el prefijo distingue esta app de las demas que
- * compartan la cuenta. Inventarse otro nombre obliga a copiar la cadena a
- * mano, y esa copia se queda vieja el dia que roten la contrasena.
+ * El nombre repite "database" porque no lo elegimos nosotros: la integracion
+ * de Neon con Vercel escribe `<PREFIJO>_DATABASE_URL` y el prefijo de esta
+ * conexion es `GASTOS_DATABASE`. Se lee tal cual a proposito. Copiar la cadena
+ * a una variable de nombre bonito es tener dos, y la copia se queda vieja el
+ * dia que roten la contrasena.
  */
 export function base(): Promise<Base> {
   conexion ??= conectar();
@@ -40,7 +41,7 @@ export function reiniciarConexion(): void {
 }
 
 async function conectar(): Promise<Base> {
-  const url = process.env.GASTOS_DATABASE_URL?.trim();
+  const url = process.env.GASTOS_DATABASE_DATABASE_URL?.trim();
   let db: Base;
 
   if (url) {
@@ -58,8 +59,10 @@ async function conectar(): Promise<Base> {
     // borraria con el siguiente despliegue. Mejor no arrancar y decir por que.
     if (process.env.VERCEL) {
       throw new Error(
-        'Falta GASTOS_DATABASE_URL. En Vercel no hay disco para PGlite: ' +
-          'conecta la base al proyecto con el prefijo GASTOS y vuelve a desplegar.',
+        'Falta GASTOS_DATABASE_DATABASE_URL. En Vercel no hay disco para ' +
+          'PGlite: conecta la base de Neon al proyecto con el prefijo ' +
+          'GASTOS_DATABASE y crea un despliegue nuevo, porque las variables ' +
+          'se congelan al desplegar.',
       );
     }
 
