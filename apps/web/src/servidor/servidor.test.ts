@@ -11,6 +11,11 @@ import { cifrar, coincide } from './claves.js';
 import { CompartidoInvalido, marcarCompartidoAceptado } from './compartido.js';
 import { comprobarClave, crearCuenta } from './cuentas.js';
 import { RevisionVieja, aplicarCambios, cambiosSchema, leerEstado, subirEstadoCompleto } from './estado.js';
+import {
+  entregarCompartidoInApp,
+  listarNotificacionesPendientes,
+  marcarNotificacionLeida,
+} from './notificaciones.js';
 import { borrarSesion, nuevaSesion, usuarioDeToken } from './sesion.js';
 
 beforeAll(async () => {
@@ -403,6 +408,135 @@ describe('compartido aceptado', () => {
         montoCentavos: 9999999,
       }),
     ).rejects.toBeInstanceOf(CompartidoInvalido);
+  });
+});
+
+describe('avisos in-app', () => {
+  it('entrega un aviso al receptor cuando la persona tiene cuenta', async () => {
+    const emisorId = await registrar('emisor-inapp@ejemplo.com');
+    const receptorId = await registrar('receptor-inapp@ejemplo.com');
+
+    await aplicarCambios(
+      emisorId,
+      0,
+      cambios({
+        personas: {
+          puestos: [{ id: 'ana', name: 'Ana', email: 'receptor-inapp@ejemplo.com', posicion: 0 }],
+        },
+        gastos: {
+          puestos: [
+            {
+              id: 'g1',
+              categoryId: 'mercado',
+              amountTotalCents: 6000000,
+              myShareCents: 3000000,
+              merchantRaw: 'Cena',
+              occurredAt: '2026-08-02T12:00:00-05:00',
+            },
+          ],
+        },
+        repartos: {
+          puestos: [
+            {
+              id: 'split-inapp',
+              expenseId: 'g1',
+              personId: 'ana',
+              amountCents: 3000000,
+            },
+          ],
+        },
+      }),
+    );
+
+    const { entregada } = await entregarCompartidoInApp(emisorId, 'split-inapp');
+    expect(entregada).toBe(true);
+
+    const pendientes = await listarNotificacionesPendientes(receptorId);
+    expect(pendientes).toHaveLength(1);
+    expect(pendientes[0]?.carga.c).toBe(3000000);
+    expect(pendientes[0]?.carga.i).toBe('split-inapp');
+  });
+
+  it('no entrega si la persona no tiene correo de cuenta', async () => {
+    const emisorId = await registrar('emisor-sin-correo@ejemplo.com');
+
+    await aplicarCambios(
+      emisorId,
+      0,
+      cambios({
+        personas: { puestos: [{ id: 'ana', name: 'Ana', posicion: 0 }] },
+        gastos: {
+          puestos: [
+            {
+              id: 'g1',
+              categoryId: 'mercado',
+              amountTotalCents: 6000000,
+              myShareCents: 3000000,
+              merchantRaw: 'Cena',
+              occurredAt: '2026-08-02T12:00:00-05:00',
+            },
+          ],
+        },
+        repartos: {
+          puestos: [
+            {
+              id: 'split-sin-correo',
+              expenseId: 'g1',
+              personId: 'ana',
+              amountCents: 3000000,
+            },
+          ],
+        },
+      }),
+    );
+
+    const { entregada } = await entregarCompartidoInApp(emisorId, 'split-sin-correo');
+    expect(entregada).toBe(false);
+  });
+
+  it('marca leída una notificación pendiente', async () => {
+    const emisorId = await registrar('emisor-leida@ejemplo.com');
+    const receptorId = await registrar('receptor-leida@ejemplo.com');
+
+    await aplicarCambios(
+      emisorId,
+      0,
+      cambios({
+        personas: {
+          puestos: [{ id: 'ana', name: 'Ana', email: 'receptor-leida@ejemplo.com', posicion: 0 }],
+        },
+        gastos: {
+          puestos: [
+            {
+              id: 'g1',
+              categoryId: 'mercado',
+              amountTotalCents: 6000000,
+              myShareCents: 3000000,
+              merchantRaw: 'Cena',
+              occurredAt: '2026-08-02T12:00:00-05:00',
+            },
+          ],
+        },
+        repartos: {
+          puestos: [
+            {
+              id: 'split-leida',
+              expenseId: 'g1',
+              personId: 'ana',
+              amountCents: 3000000,
+            },
+          ],
+        },
+      }),
+    );
+
+    await entregarCompartidoInApp(emisorId, 'split-leida');
+    const pendientes = await listarNotificacionesPendientes(receptorId);
+    expect(pendientes).toHaveLength(1);
+
+    const actualizada = await marcarNotificacionLeida(receptorId, pendientes[0]!.id);
+    expect(actualizada).toBe(true);
+    expect(await listarNotificacionesPendientes(receptorId)).toHaveLength(0);
   });
 });
 

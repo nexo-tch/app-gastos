@@ -259,6 +259,34 @@ comprobar('recordar abre la hoja de aviso', doc.querySelector('#dialogo-avisar')
 comprobar('recordar lo dice en el título', texto('#titulo-avisar').includes('Recordarle'));
 clic('#dialogo-avisar [data-cerrar]');
 
+/* ── 5d. Compartir resumen de cuenta ─────────────────────────────── */
+
+comprobar(
+  'cada persona usada ofrece compartir cuenta',
+  doc.querySelector(`[data-compartir-cuenta="${ana.id}"]`) !== null,
+);
+
+clic(`[data-compartir-cuenta="${ana.id}"]`);
+comprobar(
+  'la hoja de compartir cuenta se abre',
+  doc.querySelector('#dialogo-compartir-cuenta').open === true,
+);
+
+const mensajeCuenta = texto('#compartir-cuenta-mensaje');
+comprobar('el mensaje de cuenta lleva el enlace', mensajeCuenta.includes('#cuenta='));
+comprobar(
+  'el mensaje resume lo pendiente',
+  /Me debes \$/.test(mensajeCuenta),
+  mensajeCuenta.slice(0, 90),
+);
+
+const enlaceCuenta = mensajeCuenta.match(/#cuenta=[\w-]+/)?.[0] ?? '';
+comprobar('el enlace de cuenta no viaja vacío', enlaceCuenta.length > 15);
+
+clic('#dialogo-compartir-cuenta [data-cerrar]');
+
+await revisarCuenta(enlaceCuenta);
+
 /* ── 5c. Recibirlo en la app de la otra persona ─────────────────── */
 
 await revisarRecibido(enlaceCompartido, guardado());
@@ -480,6 +508,51 @@ async function revisarEntrada() {
 }
 
 /**
+ * El otro lado del enlace de cuenta: alguien lo abre sin app y solo ve el
+ * resumen pendiente, sin poder agregar nada a sus gastos.
+ */
+async function revisarCuenta(enlace) {
+  const ventana = new JSDOM(html, {
+    url: `http://localhost/${enlace}`,
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    virtualConsole: consola,
+    beforeParse(window) {
+      const dialogo = window.HTMLDialogElement?.prototype;
+      if (dialogo) {
+        dialogo.showModal = function () {
+          this.open = true;
+        };
+        dialogo.close = function () {
+          this.open = false;
+        };
+      }
+      window.addEventListener('error', (evento) =>
+        fallos.push(evento.error?.stack ?? evento.message),
+      );
+    },
+  }).window;
+
+  const suTexto = (selector) =>
+    ventana.document.querySelector(selector)?.textContent.replace(/\s+/g, ' ').trim() ?? '';
+
+  comprobar(
+    'el enlace de cuenta abre la ficha de solo lectura',
+    ventana.document.querySelector('#dialogo-cuenta').open === true,
+  );
+  comprobar('la ficha de cuenta no abre recibido', ventana.document.querySelector('#dialogo-recibido').open !== true);
+  comprobar('muestra el saldo entre las dos personas', /deb(e|es)/i.test(suTexto('#cuenta-resumen')));
+
+  const almacenado = ventana.localStorage.getItem('gastos.prototipo.v1');
+  comprobar(
+    'abrir la cuenta no crea gastos ni deudas',
+    !almacenado || (JSON.parse(almacenado).gastos?.length ?? 0) === 0,
+  );
+
+  ventana.close();
+}
+
+/**
  * El otro lado del enlace: alguien lo abre en su propio navegador, sin nada
  * guardado, y decide si esa parte entra en sus cuentas.
  *
@@ -693,6 +766,14 @@ async function revisarSincronizacion() {
       window.addEventListener('error', (evento) => fallos.push(evento.error?.stack ?? evento.message));
 
       window.fetch = async (url, init = {}) => {
+        if (url === '/api/notificaciones' && (!init.method || init.method === 'GET')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ notificaciones: [] }),
+          };
+        }
+
         if (url === '/api/estado' && (!init.method || init.method === 'GET')) {
           return {
             ok: true,

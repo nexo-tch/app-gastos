@@ -79,6 +79,27 @@
     let alRecibir = () => {};
     let firmaAlEstrenar = null;
     let intentosEstrenar = 0;
+    let notificaciones = [];
+    let alNotificaciones = () => {};
+
+    async function cargarNotificaciones() {
+      if (!conCuenta) return;
+
+      try {
+        const respuesta = await fetchCuenta('/api/notificaciones');
+        if (respuesta.status === 401) {
+          location.href = '/entrar';
+          return;
+        }
+        if (!respuesta.ok) return;
+
+        const cuerpo = await respuesta.json();
+        notificaciones = cuerpo.notificaciones ?? [];
+        alNotificaciones(notificaciones);
+      } catch (error) {
+        console.warn('No se pudo leer notificaciones', error);
+      }
+    }
 
     const fetchCuenta = (url, init = {}) =>
       fetch(url, { credentials: 'same-origin', ...init });
@@ -321,6 +342,7 @@
       }
 
       adoptar(cuerpo.datos, cuerpo.revision);
+      await cargarNotificaciones();
     }
 
     if (conCuenta) {
@@ -354,6 +376,7 @@
         if (cuerpo.revision !== revision || firma(cuerpo.datos) !== firma(confirmado)) {
           adoptar(cuerpo.datos, cuerpo.revision);
         }
+        await cargarNotificaciones();
       } catch (error) {
         console.warn('No se pudo refrescar la cuenta', error);
       }
@@ -388,8 +411,112 @@
 
       estrenar,
       refrescar,
+      notificaciones: () => notificaciones,
+      escucharNotificaciones(fn) {
+        alNotificaciones = fn;
+      },
     };
   })();
+
+  let notificacionesPendientes = [];
+  let notifOrigen = null;
+
+  almacen.escucharNotificaciones((lista) => {
+    notificacionesPendientes = lista;
+    pintarBadgeNotificaciones();
+  });
+
+  const dialogoNotificaciones = document.getElementById('dialogo-notificaciones');
+
+  function pintarBadgeNotificaciones() {
+    const btn = document.getElementById('btn-notificaciones');
+    const badge = document.getElementById('notificaciones-badge');
+    if (!btn || !badge) return;
+
+    const n = notificacionesPendientes.length;
+    btn.hidden = !almacen.conCuenta;
+    badge.hidden = n === 0;
+    badge.textContent = n > 9 ? '9+' : String(n);
+    btn.setAttribute(
+      'aria-label',
+      n > 0 ? `${n} aviso${n === 1 ? '' : 's'} pendiente${n === 1 ? '' : 's'}` : 'Avisos',
+    );
+  }
+
+  function pintarNotificaciones() {
+    const lista = document.getElementById('notificaciones-lista');
+    if (!lista) return;
+
+    if (notificacionesPendientes.length === 0) {
+      lista.innerHTML = '<p class="pista">No tienes avisos pendientes.</p>';
+      return;
+    }
+
+    lista.innerHTML = notificacionesPendientes
+      .map((notif) => {
+        const quien = notif.emisorNombre || notif.carga?.de || 'Alguien';
+        const titulo = notif.carga?.q || 'Un gasto';
+        const monto = Number(notif.carga?.c) || 0;
+        return `
+          <button type="button" class="notificacion" data-notificacion="${escapar(notif.id)}">
+            <span class="notificacion__quien">${escapar(quien)} te compartió un gasto</span>
+            <span class="notificacion__que">${escapar(titulo)}</span>
+            <span class="notificacion__monto">${plata(monto)}</span>
+          </button>`;
+      })
+      .join('');
+  }
+
+  function abrirNotificaciones() {
+    pintarNotificaciones();
+    dialogoNotificaciones.showModal();
+  }
+
+  async function marcarNotificacionLeida(id) {
+    if (!almacen.conCuenta || !id) return;
+
+    try {
+      await fetch('/api/notificaciones', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      notificacionesPendientes = notificacionesPendientes.filter((n) => n.id !== id);
+      pintarBadgeNotificaciones();
+      pintarNotificaciones();
+    } catch (error) {
+      console.warn('No se pudo marcar la notificación', error);
+    }
+  }
+
+  function abrirDesdeNotificacion(id) {
+    const notif = notificacionesPendientes.find((n) => n.id === id);
+    if (!notif?.carga) return;
+
+    notifOrigen = id;
+    dialogoNotificaciones.close();
+    abrirRecibido(notif.carga);
+  }
+
+  async function entregarInApp(idReparto) {
+    if (!almacen.conCuenta) return false;
+
+    try {
+      const respuesta = await fetch('/api/compartido/avisar', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ repartoId: idReparto }),
+      });
+      if (!respuesta.ok) return false;
+      const cuerpo = await respuesta.json();
+      return Boolean(cuerpo.entregada);
+    } catch (error) {
+      console.warn('No se pudo avisar en la app', error);
+      return false;
+    }
+  }
 
   /* ══ Utilidades ══════════════════════════════════════════════════ */
 
@@ -1383,6 +1510,13 @@
             <button type="button" class="boton boton--marco boton--chico" data-debo-persona="${persona.id}">
               Registrar deuda
             </button>
+            ${
+              usada
+                ? `<button type="button" class="boton boton--fantasma boton--chico" data-compartir-cuenta="${persona.id}">
+                     Compartir cuenta
+                   </button>`
+                : ''
+            }
           </div>
           ${
             usada
@@ -1532,6 +1666,8 @@
     else if (vista === 'presupuesto') lienzo.innerHTML = vistaPresupuesto(resumen);
     else if (vista === 'personas') lienzo.innerHTML = vistaPersonas();
     else if (vista === 'fijos') lienzo.innerHTML = vistaFijos();
+
+    pintarBadgeNotificaciones();
   }
 
   /* ══ Diálogo de gasto ════════════════════════════════════════════ */
@@ -2046,6 +2182,8 @@
     const idReparto = avisoPendiente.idReparto;
     const esRecordar = avisoPendiente.esRecordar;
 
+    const entregadaInApp = await entregarInApp(idReparto);
+
     // El enlace va dentro del texto y no como `url` aparte porque hay apps que
     // se quedan con uno de los dos campos y tiran el otro.
     if (sePuedeCompartir()) {
@@ -2053,11 +2191,19 @@
         await navigator.share({ text: texto });
         marcarRepartoAvisado(idReparto);
         avisoCompletadoCola();
-        if (esRecordar) avisar('Recordatorio enviado');
+        if (esRecordar) avisar(entregadaInApp ? 'Recordatorio enviado y aviso en su app.' : 'Recordatorio enviado');
+        else if (entregadaInApp) avisar('Compartido. También le llegó a su app.');
         return;
       } catch (error) {
         // Cerrar la hoja de compartir no es un fallo del que haya que avisar.
-        if (error?.name === 'AbortError') return;
+        if (error?.name === 'AbortError') {
+          if (entregadaInApp) {
+            marcarRepartoAvisado(idReparto);
+            avisoCompletadoCola();
+            avisar('Le llegó el aviso a su app.');
+          }
+          return;
+        }
       }
     }
 
@@ -2065,10 +2211,244 @@
       await navigator.clipboard.writeText(texto);
       marcarRepartoAvisado(idReparto);
       avisoCompletadoCola();
-      avisar(esRecordar ? 'Recordatorio copiado: pégalo en WhatsApp.' : 'Mensaje copiado: pégalo en WhatsApp.');
+      if (entregadaInApp) {
+        avisar(
+          esRecordar
+            ? 'Recordatorio copiado y aviso en su app.'
+            : 'Mensaje copiado y aviso en su app.',
+        );
+      } else {
+        avisar(esRecordar ? 'Recordatorio copiado: pégalo en WhatsApp.' : 'Mensaje copiado: pégalo en WhatsApp.');
+      }
+    } catch {
+      if (entregadaInApp) avisar('Le llegó el aviso a su app, pero no pude copiar el mensaje.');
+      else avisar('No se pudo copiar. Selecciona el mensaje y cópialo a mano.');
+    }
+  }
+
+  /* ══ Compartir resumen de cuenta con alguien ═════════════════════
+   * Para quien no tiene la app: un enlace de solo lectura con lo pendiente
+   * entre las dos personas. Nada se escribe en sus cuentas al abrirlo.
+   */
+
+  const MARCA_CUENTA = 'cuenta';
+
+  function tituloItemCobrar(item) {
+    return `${nombreDelGasto(item.expenseId, nombreCategoria(item.categoryId))} · ${nombreDia(diaDeIso(item.occurredAt))}`;
+  }
+
+  function tituloItemPagar(deuda) {
+    return `${deuda.description || 'un gasto'} · ${nombreDia(diaDeIso(deuda.occurredAt))}`;
+  }
+
+  function resumenCuentaDePersona(idPersona) {
+    const persona = personaPorId(idPersona);
+    if (!persona) return null;
+
+    const cuenta = porCobrar().byPerson.find((p) => p.personId === idPersona);
+    const mio = porPagar().byPerson.find((p) => p.personId === idPersona);
+
+    const teDebe = cuenta?.pendingCents ?? 0;
+    const leDebes = mio?.pendingCents ?? 0;
+    const credito = cuenta?.creditCents ?? 0;
+    const neto = teDebe - credito - leDebes;
+
+    const items = [];
+    for (const item of (cuenta?.items ?? []).filter((x) => !x.isSettled && (x.pendingCents || x.amountCents) > 0)) {
+      items.push({
+        q: String(tituloItemCobrar(item)).slice(0, 60),
+        m: item.pendingCents || item.amountCents,
+        l: 'c',
+      });
+    }
+    for (const deuda of (mio?.items ?? []).filter((d) => !d.settledAt && d.amountCents > 0)) {
+      items.push({
+        q: String(tituloItemPagar(deuda)).slice(0, 60),
+        m: deuda.amountCents,
+        l: 'p',
+      });
+    }
+
+    const quien = almacen.quienSoy();
+    const carga = {
+      v: 1,
+      de: (quien?.nombre ?? '').trim().slice(0, 40),
+      pn: String(persona.name).slice(0, 40),
+      c: teDebe,
+      p: leDebes,
+      cr: credito,
+      n: neto,
+      i: items.slice(0, 25),
+    };
+
+    const enlace = `${location.href.split('#')[0]}#${MARCA_CUENTA}=${aClave(JSON.stringify(carga))}`;
+
+    const lineas = [`Te comparto nuestra cuenta${persona.name ? `, ${persona.name}` : ''}:`];
+    if (teDebe > 0) lineas.push(`Me debes ${plata(teDebe)}`);
+    if (leDebes > 0) lineas.push(`Te debo ${plata(leDebes)}`);
+    if (credito > 0) lineas.push(`Tienes ${plata(credito)} a favor sin aplicar`);
+
+    if (neto > 0) lineas.push(`\nEn total me debes ${plata(neto)}.`);
+    else if (neto < 0) lineas.push(`\nEn total te debo ${plata(-neto)}.`);
+    else lineas.push('\nEstamos a mano.');
+
+    if (items.length > 0) {
+      lineas.push('');
+      for (const it of items) {
+        const pref = it.l === 'c' ? 'Me debes' : 'Te debo';
+        lineas.push(`· ${pref} ${plata(it.m)} — ${it.q}`);
+      }
+    }
+
+    lineas.push(`\nÁbrelo aquí para ver el detalle: ${enlace}`);
+
+    return { texto: lineas.join('\n'), persona, enlace };
+  }
+
+  const dialogoCompartirCuenta = document.getElementById('dialogo-compartir-cuenta');
+  let cuentaCompartirPendiente = null;
+
+  function abrirCompartirCuenta(idPersona) {
+    const resumen = resumenCuentaDePersona(idPersona);
+    if (!resumen) return;
+
+    cuentaCompartirPendiente = resumen;
+    const nombre = resumen.persona.name;
+
+    document.getElementById('titulo-compartir-cuenta').textContent = `Compartir cuenta con ${nombre}`;
+    document.getElementById('compartir-cuenta-explicacion').textContent =
+      `${nombre} verá lo pendiente entre ustedes en una pantalla de solo lectura. ` +
+      `No hace falta que tenga la app ni una cuenta.`;
+    document.getElementById('compartir-cuenta-mensaje').textContent = resumen.texto;
+    document.getElementById('compartir-cuenta-enviar').textContent = sePuedeCompartir()
+      ? 'Compartir'
+      : 'Copiar mensaje';
+
+    dialogoCompartirCuenta.showModal();
+  }
+
+  async function enviarCompartirCuenta() {
+    if (!cuentaCompartirPendiente) return;
+    const texto = cuentaCompartirPendiente.texto;
+
+    if (sePuedeCompartir()) {
+      try {
+        await navigator.share({ text: texto });
+        cuentaCompartirPendiente = null;
+        dialogoCompartirCuenta.close();
+        avisar('Resumen compartido');
+        return;
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(texto);
+      cuentaCompartirPendiente = null;
+      dialogoCompartirCuenta.close();
+      avisar('Mensaje copiado: pégalo en WhatsApp.');
     } catch {
       avisar('No se pudo copiar. Selecciona el mensaje y cópialo a mano.');
     }
+  }
+
+  const dialogoCuenta = document.getElementById('dialogo-cuenta');
+  let cuentaRecibida = null;
+
+  function leerEnlaceCuenta() {
+    const marca = location.hash.match(new RegExp(`^#${MARCA_CUENTA}=(.+)$`));
+    if (!marca) return null;
+
+    try {
+      const carga = JSON.parse(deClave(marca[1]));
+      if (carga?.v !== 1) return null;
+
+      const items = Array.isArray(carga.i)
+        ? carga.i
+            .map((it) => ({
+              q: typeof it.q === 'string' ? it.q.slice(0, 60).trim() : '',
+              m: Number.isInteger(it.m) && it.m > 0 ? it.m : 0,
+              l: it.l === 'p' ? 'p' : 'c',
+            }))
+            .filter((it) => it.m > 0 && it.q)
+        : [];
+
+      const entero = (valor) => (Number.isInteger(valor) && valor >= 0 ? valor : 0);
+
+      return {
+        de: typeof carga.de === 'string' ? carga.de.slice(0, 40).trim() : '',
+        pn: typeof carga.pn === 'string' ? carga.pn.slice(0, 40).trim() : '',
+        c: entero(carga.c),
+        p: entero(carga.p),
+        cr: entero(carga.cr),
+        n: Number.isInteger(carga.n) ? carga.n : entero(carga.c) - entero(carga.cr) - entero(carga.p),
+        i: items,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  function htmlBloqueCuenta(titulo, total, items, modo) {
+    if (total <= 0 && items.length === 0) return '';
+
+    const filas = items
+      .map(
+        (it) => `
+        <div class="deuda">
+          <span class="deuda__que">${escapar(it.q)}</span>
+          <span class="deuda__cuanto">${plata(it.m)}</span>
+        </div>`,
+      )
+      .join('');
+
+    return `
+      <div class="persona__bloque persona__bloque--${modo}">
+        <div class="persona__bloque-cabeza">
+          <span class="persona__bloque-titulo">${titulo}</span>
+          ${total > 0 ? `<span class="persona__bloque-total cifra">${plata(total)}</span>` : ''}
+        </div>
+        <div class="persona__bloque-lista">
+          ${filas || `<p class="persona__bloque-vacio">Sin partidas pendientes.</p>`}
+        </div>
+      </div>`;
+  }
+
+  function abrirCuentaRecibida(carga) {
+    cuentaRecibida = carga;
+    const quien = carga.de || 'Alguien';
+
+    document.getElementById('titulo-cuenta').textContent = `${quien} te compartió la cuenta`;
+    document.getElementById('cuenta-explicacion').textContent =
+      'Es solo lectura: no se agrega nada a tus gastos. Para registrar una partida, pídele el enlace de ese gasto.';
+
+    const itemsDebes = carga.i.filter((it) => it.l === 'c');
+    const itemsTeDebe = carga.i.filter((it) => it.l === 'p');
+
+    let netoTexto = '';
+    if (carga.n > 0) netoTexto = `En total le debes <b class="cifra">${plata(carga.n)}</b> a ${escapar(quien)}.`;
+    else if (carga.n < 0) netoTexto = `En total ${escapar(quien)} te debe <b class="cifra">${plata(-carga.n)}</b>.`;
+    else netoTexto = 'Están a mano: no hay saldo pendiente entre ustedes.';
+
+    document.getElementById('cuenta-resumen').innerHTML = `
+      <p class="cuenta__neto">${netoTexto}</p>
+      <div class="cuenta__bloques">
+        ${htmlBloqueCuenta(`Le debes a ${escapar(quien)}`, carga.c, itemsDebes, 'pagar')}
+        ${htmlBloqueCuenta(`${escapar(quien)} te debe`, carga.p, itemsTeDebe, 'cobrar')}
+        ${
+          carga.cr > 0
+            ? `<div class="persona__bloque persona__bloque--cobrar">
+                 <div class="persona__bloque-cabeza">
+                   <span class="persona__bloque-titulo">A tu favor sin aplicar</span>
+                   <span class="persona__bloque-total cifra">${plata(carga.cr)}</span>
+                 </div>
+               </div>`
+            : ''
+        }
+      </div>`;
+
+    dialogoCuenta.showModal();
   }
 
   /* ══ Recibir la parte que te compartieron ════════════════════════ */
@@ -2299,6 +2679,10 @@
     dialogoRecibido.close();
     avisar(`Listo: le debes ${plata(carga.c)} a ${nombre}`);
     notificarAceptacionCompartido(carga);
+    if (notifOrigen) {
+      marcarNotificacionLeida(notifOrigen);
+      notifOrigen = null;
+    }
   }
 
   /* ══ Correo de cuenta de una persona ═════════════════════════════ */
@@ -2312,7 +2696,7 @@
     correoPersonaEditando = idPersona;
     document.getElementById('titulo-correo-persona').textContent = `Correo de ${persona.name}`;
     document.getElementById('correo-persona-explicacion').textContent =
-      'Si tiene cuenta en la app, pon el mismo correo: así la reconocemos cuando te comparta un gasto.';
+      'Si tiene cuenta en la app, pon el mismo correo: así la reconocemos y le llega el aviso aquí cuando compartes.';
     document.getElementById('correo-persona').value = persona.email ?? '';
     dialogoCorreoPersona.showModal();
     setTimeout(() => document.getElementById('correo-persona').focus(), 40);
@@ -2928,6 +3312,24 @@
       return;
     }
 
+    const compartirCuenta = objetivo.closest('[data-compartir-cuenta]');
+    if (compartirCuenta) {
+      abrirCompartirCuenta(compartirCuenta.dataset.compartirCuenta);
+      return;
+    }
+
+    if (objetivo.closest('#compartir-cuenta-enviar')) {
+      enviarCompartirCuenta();
+      return;
+    }
+
+    if (objetivo.closest('#cuenta-cerrar')) {
+      cuentaRecibida = null;
+      olvidarEnlace();
+      dialogoCuenta.close();
+      return;
+    }
+
     const categoriaRecibida = objetivo.closest('[data-categoria-recibido]');
     if (categoriaRecibida) {
       categoriaRecibido = categoriaRecibida.dataset.categoriaRecibido;
@@ -2944,6 +3346,21 @@
       recibido = null;
       olvidarEnlace();
       dialogoRecibido.close();
+      if (notifOrigen) {
+        marcarNotificacionLeida(notifOrigen);
+        notifOrigen = null;
+      }
+      return;
+    }
+
+    if (objetivo.closest('#btn-notificaciones')) {
+      abrirNotificaciones();
+      return;
+    }
+
+    const notificacion = objetivo.closest('[data-notificacion]');
+    if (notificacion) {
+      abrirDesdeNotificacion(notificacion.dataset.notificacion);
       return;
     }
 
@@ -3349,6 +3766,10 @@
   // Si se llego aqui desde un enlace compartido, lo primero es resolverlo.
   const compartido = leerEnlace();
   if (compartido) abrirRecibido(compartido);
+  else {
+    const cuenta = leerEnlaceCuenta();
+    if (cuenta) abrirCuentaRecibida(cuenta);
+  }
 
   // Lo que hace que se pueda instalar en la pantalla de inicio y abrir sin
   // senal. No guarda datos, solo la cascara.

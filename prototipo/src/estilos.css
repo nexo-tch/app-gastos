@@ -272,6 +272,74 @@ button {
   font-size: 12px;
 }
 
+.icono--campana {
+  position: relative;
+}
+
+.icono--campana svg {
+  width: 20px;
+  height: 20px;
+}
+
+.notificaciones-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--acento);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.notificaciones-lista {
+  display: grid;
+  gap: 8px;
+}
+
+.notificacion {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.14s ease, background-color 0.14s ease;
+}
+
+.notificacion:hover {
+  border-color: var(--borde-fuerte);
+  background: var(--superficie-3);
+}
+
+.notificacion__quien {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto-3);
+}
+
+.notificacion__que {
+  font-size: 14px;
+  color: var(--texto);
+}
+
+.notificacion__monto {
+  font-size: 14px;
+  font-weight: 600;
+  align-self: center;
+}
+
 .tarjeta {
   background: var(--superficie);
   border: 1px solid var(--borde);
@@ -1491,6 +1559,25 @@ select.entrada {
 
 .recibido__resumen b {
   color: var(--texto);
+}
+
+.cuenta__neto {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: var(--radio);
+  background: var(--fondo-2);
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--texto);
+}
+
+.cuenta__neto b {
+  font-variant-numeric: tabular-nums;
+}
+
+.cuenta__bloques {
+  display: grid;
+  gap: 10px;
 }
 
 /* ── Boton flotante y avisos ────────────────────────────────────── */

@@ -268,3 +268,27 @@ export const instancias = pgTable(
     mesIdx: index('instancias_mes_idx').on(t.usuarioId, t.mes),
   }),
 );
+
+/**
+ * Avisos in-app cuando alguien con cuenta comparte un gasto contigo.
+ * Viven aparte del estado de dominio: son eventos cross-user hacia el receptor.
+ */
+export const notificaciones = pgTable(
+  'notificaciones',
+  {
+    id: text('id').notNull(),
+    ...dueno(),
+    tipo: text('tipo').notNull(),
+    repartoId: text('reparto_id').notNull(),
+    emisorCorreo: text('emisor_correo').notNull(),
+    emisorNombre: text('emisor_nombre'),
+    /** Mismo JSON que viaja en el enlace #compartido, para abrir el flujo recibido. */
+    carga: text('carga').notNull(),
+    leidaEn: timestamp('leida_en', { withTimezone: true }),
+    creadaEn: timestamp('creada_en', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.usuarioId, t.id] }),
+    pendientesIdx: index('notificaciones_pendientes_idx').on(t.usuarioId, t.creadaEn),
+  }),
+);

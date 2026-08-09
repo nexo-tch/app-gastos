@@ -68,4 +68,12 @@ export const MIGRACIONES: Migracion[] = [
       "ALTER TABLE \"repartos\" ADD COLUMN \"aceptado_en\" timestamp with time zone;",
     ],
   },
+  {
+    nombre: "0005_notificaciones",
+    sentencias: [
+      "CREATE TABLE \"notificaciones\" (\n\t\"id\" text NOT NULL,\n\t\"usuario_id\" text NOT NULL,\n\t\"tipo\" text NOT NULL,\n\t\"reparto_id\" text NOT NULL,\n\t\"emisor_correo\" text NOT NULL,\n\t\"emisor_nombre\" text,\n\t\"carga\" text NOT NULL,\n\t\"leida_en\" timestamp with time zone,\n\t\"creada_en\" timestamp with time zone DEFAULT now() NOT NULL,\n\tCONSTRAINT \"notificaciones_usuario_id_id_pk\" PRIMARY KEY(\"usuario_id\",\"id\")\n);",
+      "ALTER TABLE \"notificaciones\" ADD CONSTRAINT \"notificaciones_usuario_id_usuarios_id_fk\" FOREIGN KEY (\"usuario_id\") REFERENCES \"public\".\"usuarios\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+      "CREATE INDEX \"notificaciones_pendientes_idx\" ON \"notificaciones\" USING btree (\"usuario_id\",\"creada_en\");",
+    ],
+  },
 ];

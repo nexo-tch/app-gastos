@@ -43,6 +43,15 @@
         </div>
 
         <div class="cabecera__acciones">
+          <button type="button" class="icono icono--campana" id="btn-notificaciones" hidden
+                  aria-label="Avisos">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.7 21a2 2 0 01-3.4 0" />
+            </svg>
+            <span class="notificaciones-badge" id="notificaciones-badge" hidden>0</span>
+          </button>
           <button type="button" class="boton boton--fantasma" data-abrir="datos">Datos</button>
           <button type="button" class="boton boton--solido" data-abrir="gasto">Registrar gasto</button>
         </div>
@@ -290,6 +299,69 @@
           <button type="button" class="boton boton--solido" id="recibido-agregar">
             Agregar a mis gastos
           </button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Bandeja de avisos in-app (gastos compartidos) -->
+    <dialog class="hoja hoja--angosta" id="dialogo-notificaciones" aria-labelledby="titulo-notificaciones">
+      <div class="hoja__forma">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-notificaciones">Avisos</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="hoja__cuerpo">
+          <p class="pista" id="notificaciones-explicacion">
+            Cuando alguien con cuenta te comparte un gasto, aparece aquí para que lo agregues sin depender del enlace.
+          </p>
+          <div class="notificaciones-lista" id="notificaciones-lista"></div>
+        </div>
+
+        <div class="hoja__pie">
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--solido" data-cerrar>Cerrar</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Resumen de cuenta con alguien (para quien no tiene la app) -->
+    <dialog class="hoja hoja--angosta" id="dialogo-compartir-cuenta" aria-labelledby="titulo-compartir-cuenta">
+      <div class="hoja__forma">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-compartir-cuenta">Compartir cuenta</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="hoja__cuerpo">
+          <p class="pista" id="compartir-cuenta-explicacion"></p>
+          <p class="mensaje" id="compartir-cuenta-mensaje"></p>
+        </div>
+
+        <div class="hoja__pie">
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Después</button>
+          <button type="button" class="boton boton--solido" id="compartir-cuenta-enviar">Compartir</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Resumen de cuenta que alguien compartió (solo lectura) -->
+    <dialog class="hoja hoja--angosta" id="dialogo-cuenta" aria-labelledby="titulo-cuenta">
+      <div class="hoja__forma">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-cuenta">Cuenta compartida</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="hoja__cuerpo">
+          <p class="pista" id="cuenta-explicacion"></p>
+          <div id="cuenta-resumen"></div>
+        </div>
+
+        <div class="hoja__pie">
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--solido" id="cuenta-cerrar">Cerrar</button>
         </div>
       </div>
     </dialog>
