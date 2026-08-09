@@ -1207,13 +1207,15 @@
     const cuenta = cuentas.byPerson.find((p) => p.personId === persona.id);
     const mio = mias.byPerson.find((p) => p.personId === persona.id);
 
-    const pendiente = cuenta?.netCents ?? 0;
-    const debido = mio?.pendingCents ?? 0;
-    const items = (cuenta?.items ?? []).slice(0, 6);
+    const pendienteCobrar = cuenta?.pendingCents ?? 0;
+    const netoCobrar = cuenta?.netCents ?? 0;
+    const pendientePagar = mio?.pendingCents ?? 0;
 
-    // Las deudas pagadas se quedan tachadas un rato: es la única forma de
-    // deshacer un "Pagué" que se tocó sin querer.
-    const debidos = [
+    const itemsCobrar = [
+      ...(cuenta?.items ?? []).filter((item) => !item.isSettled),
+      ...(cuenta?.items ?? []).filter((item) => item.isSettled).slice(0, 3),
+    ];
+    const itemsPagar = [
       ...(mio?.items ?? []).filter((d) => !d.settledAt),
       ...(mio?.items ?? []).filter((d) => d.settledAt).slice(0, 3),
     ];
@@ -1222,13 +1224,53 @@
       datos.repartos.some((r) => r.personId === persona.id) ||
       datos.deudas.some((d) => d.personId === persona.id);
 
-    // Con las dos direcciones en la misma tarjeta, una cifra sola no dice nada:
-    // hay que decir siempre para qué lado va.
     const saldos = [];
-    if (pendiente > 0) saldos.push({ signo: 'debe', texto: `Te debe ${plata(pendiente)}` });
-    else if (pendiente < 0) saldos.push({ signo: 'favor', texto: `${plata(-pendiente)} a favor` });
-    if (debido > 0) saldos.push({ signo: 'pago', texto: `Le debes ${plata(debido)}` });
+    if (netoCobrar > 0) saldos.push({ signo: 'debe', texto: `Te debe ${plata(netoCobrar)}` });
+    else if (netoCobrar < 0) saldos.push({ signo: 'favor', texto: `${plata(-netoCobrar)} a favor` });
+    if (pendientePagar > 0) saldos.push({ signo: 'pago', texto: `Le debes ${plata(pendientePagar)}` });
     if (saldos.length === 0) saldos.push({ signo: 'cero', texto: 'Al día' });
+
+    const bloqueCobrar =
+      pendienteCobrar > 0 || itemsCobrar.length > 0 || (cuenta?.creditCents ?? 0) > 0
+        ? `<div class="persona__bloque persona__bloque--cobrar">
+             <div class="persona__bloque-cabeza">
+               <span class="persona__bloque-titulo">Te debe</span>
+               <span class="persona__bloque-total cifra">${plata(pendienteCobrar)}</span>
+             </div>
+             <div class="persona__bloque-lista">
+               ${
+                 itemsCobrar.length > 0
+                   ? itemsCobrar.map((item) => filaDeudaCobrar(item, persona)).join('')
+                   : `<p class="persona__bloque-vacio">Sin gastos compartidos pendientes.</p>`
+               }
+               ${
+                 (cuenta?.creditCents ?? 0) > 0
+                   ? `<div class="deuda">
+                        <span class="deuda__que">Saldo a favor sin aplicar</span>
+                        <span class="deuda__cuanto">${plata(cuenta.creditCents)}</span>
+                      </div>`
+                   : ''
+               }
+             </div>
+           </div>`
+        : '';
+
+    const bloquePagar =
+      pendientePagar > 0 || itemsPagar.length > 0
+        ? `<div class="persona__bloque persona__bloque--pagar">
+             <div class="persona__bloque-cabeza">
+               <span class="persona__bloque-titulo">Le debes</span>
+               <span class="persona__bloque-total cifra">${plata(pendientePagar)}</span>
+             </div>
+             <div class="persona__bloque-lista">
+               ${
+                 itemsPagar.length > 0
+                   ? itemsPagar.map((deuda) => filaDeudaPagar(deuda)).join('')
+                   : `<p class="persona__bloque-vacio">Sin deudas pendientes.</p>`
+               }
+             </div>
+           </div>`
+        : '';
 
     return `
       <div class="persona">
@@ -1239,7 +1281,7 @@
             .map((s) => `<span class="persona__saldo" data-signo="${s.signo}">${s.texto}</span>`)
             .join('')}
           ${
-            (cuenta?.pendingCents ?? 0) > 0
+            pendienteCobrar > 0
               ? `<button type="button" class="boton boton--marco boton--chico" data-abonar="${persona.id}">
                    Registrar abono
                  </button>`
@@ -1252,48 +1294,35 @@
           }
         </div>
 
+        ${bloqueCobrar || bloquePagar ? `<div class="persona__cuerpo">${bloqueCobrar}${bloquePagar}</div>` : ''}
+      </div>`;
+  }
+
+  function filaDeudaCobrar(item, persona) {
+    return `
+      <div class="deuda ${item.isSettled ? 'deuda--saldada' : ''}">
+        <span class="deuda__que">${escapar(nombreDelGasto(item.expenseId, nombreCategoria(item.categoryId)))}
+          · ${escapar(nombreDia(diaDeIso(item.occurredAt)))}</span>
+        <span class="deuda__cuanto">${plata(item.pendingCents || item.amountCents)}</span>
         ${
-          items.length > 0 || debidos.length > 0
-            ? `<div class="persona__cuerpo">
-                 ${items
-                   .map(
-                     (item) => `
-                     <div class="deuda ${item.isSettled ? 'deuda--saldada' : ''}">
-                       <span class="deuda__que">${escapar(nombreDelGasto(item.expenseId, nombreCategoria(item.categoryId)))}
-                         · ${escapar(nombreDia(diaDeIso(item.occurredAt)))}</span>
-                       <span class="deuda__cuanto">${plata(item.pendingCents || item.amountCents)}</span>
-                       ${
-                         item.isSettled
-                           ? ''
-                           : `<button type="button" class="boton boton--fantasma boton--chico"
-                                      data-avisar="${item.splitId}"
-                                      aria-label="Avisarle a ${escapar(persona.name)}">Avisar</button>`
-                       }
-                     </div>`,
-                   )
-                   .join('')}
-                 ${
-                   (cuenta?.creditCents ?? 0) > 0
-                     ? `<div class="deuda"><span class="deuda__que">Saldo a favor sin aplicar</span>
-                          <span class="deuda__cuanto">${plata(cuenta.creditCents)}</span></div>`
-                     : ''
-                 }
-                 ${debidos
-                   .map(
-                     (deuda) => `
-                     <div class="deuda ${deuda.settledAt ? 'deuda--saldada' : ''}">
-                       <span class="deuda__que">Le debes: ${escapar(deuda.description || 'un gasto')}
-                         · ${escapar(nombreDia(diaDeIso(deuda.occurredAt)))}</span>
-                       <span class="deuda__cuanto">${plata(deuda.amountCents)}</span>
-                       <button type="button" class="boton boton--fantasma boton--chico" data-pague="${deuda.id}">
-                         ${deuda.settledAt ? 'Deshacer' : 'Pagué'}
-                       </button>
-                     </div>`,
-                   )
-                   .join('')}
-               </div>`
-            : ''
+          item.isSettled
+            ? ''
+            : `<button type="button" class="boton boton--fantasma boton--chico"
+                       data-avisar="${item.splitId}"
+                       aria-label="Avisarle a ${escapar(persona.name)}">Avisar</button>`
         }
+      </div>`;
+  }
+
+  function filaDeudaPagar(deuda) {
+    return `
+      <div class="deuda ${deuda.settledAt ? 'deuda--saldada' : ''}">
+        <span class="deuda__que">${escapar(deuda.description || 'un gasto')}
+          · ${escapar(nombreDia(diaDeIso(deuda.occurredAt)))}</span>
+        <span class="deuda__cuanto">${plata(deuda.amountCents)}</span>
+        <button type="button" class="boton boton--fantasma boton--chico" data-pague="${deuda.id}">
+          ${deuda.settledAt ? 'Deshacer' : 'Pagué'}
+        </button>
       </div>`;
   }
 

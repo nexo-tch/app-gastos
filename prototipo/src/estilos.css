@@ -938,7 +938,64 @@ button {
   margin-top: 10px;
   display: flex;
   flex-direction: column;
+  gap: 12px;
+}
+
+.persona__bloque {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radio-chico);
+  background: var(--superficie-2);
+}
+
+.persona__bloque--cobrar {
+  border: 1px solid color-mix(in srgb, var(--marca) 18%, var(--borde));
+}
+
+.persona__bloque--pagar {
+  border: 1px solid color-mix(in srgb, var(--aviso) 18%, var(--borde));
+}
+
+.persona__bloque-cabeza {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.persona__bloque-titulo {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texto-3);
+}
+
+.persona__bloque--cobrar .persona__bloque-titulo {
+  color: var(--marca);
+}
+
+.persona__bloque--pagar .persona__bloque-titulo {
+  color: var(--aviso);
+}
+
+.persona__bloque-total {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.persona__bloque-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.persona__bloque-vacio {
+  margin: 0;
+  font-size: 12px;
+  color: var(--texto-3);
 }
 
 .deuda {
