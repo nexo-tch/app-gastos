@@ -13,6 +13,7 @@
   },
   "scripts": {
     "build": "turbo run build",
+    "construir": "node prototipo/construir.mjs",
     "dev": "turbo run dev",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",

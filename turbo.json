@@ -8,9 +8,13 @@
   "globalPassThroughEnv": ["GASTOS_*"],
 
   "tasks": {
+    "//#construir": {
+      "cache": false,
+      "outputs": ["apps/web/public/**", "prototipo/gastos.html"]
+    },
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+      "dependsOn": ["^build", "//#construir"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "public/**"]
     },
     "test": {
       "dependsOn": ["^build"],
