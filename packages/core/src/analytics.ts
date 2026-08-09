@@ -35,18 +35,11 @@ export interface CategorySlice {
   expenseCount: number;
 }
 
-/** Como se reparte mi gasto entre categorias. Alimenta la dona del panel. */
-export function categoryDistribution(
-  expenses: readonly Expense[],
-  month: MonthKey,
-  options: AnalyticsOptions = {},
-): CategorySlice[] {
-  const { utcOffset = DEFAULT_UTC_OFFSET } = options;
-  const scoped = confirmedInMonth(expenses, month, utcOffset);
-  const total = sumCents(scoped.map((expense) => expense.myShareCents));
+function bucketByCategory(expenses: readonly Expense[]): CategorySlice[] {
+  const total = sumCents(expenses.map((expense) => expense.myShareCents));
 
   const buckets = new Map<string | null, { cents: Cents; count: number }>();
-  for (const expense of scoped) {
+  for (const expense of expenses) {
     const key = expense.categoryId ?? null;
     const bucket = buckets.get(key) ?? { cents: 0, count: 0 };
     bucket.cents += expense.myShareCents;
@@ -62,6 +55,45 @@ export function categoryDistribution(
       expenseCount: bucket.count,
     }))
     .sort((a, b) => b.spentCents - a.spentCents);
+}
+
+/** Como se reparte mi gasto entre categorias. Alimenta la dona del panel. */
+export function categoryDistribution(
+  expenses: readonly Expense[],
+  month: MonthKey,
+  options: AnalyticsOptions = {},
+): CategorySlice[] {
+  const { utcOffset = DEFAULT_UTC_OFFSET } = options;
+  return bucketByCategory(confirmedInMonth(expenses, month, utcOffset));
+}
+
+/**
+ * Reparto por categoría en un rango de meses. `count: null` incluye todo el historial.
+ */
+export function categoryDistributionRange(
+  expenses: readonly Expense[],
+  currentMonth: MonthKey,
+  options: AnalyticsOptions & { count?: number | null } = {},
+): CategorySlice[] {
+  const { utcOffset = DEFAULT_UTC_OFFSET, count = 6 } = options;
+
+  if (count === null) {
+    return bucketByCategory(
+      expenses.filter((expense) => !expense.deletedAt && expense.status === 'confirmed'),
+    );
+  }
+
+  const months = new Set<MonthKey>();
+  for (let i = count - 1; i >= 0; i -= 1) months.add(addMonths(currentMonth, -i));
+
+  return bucketByCategory(
+    expenses.filter(
+      (expense) =>
+        !expense.deletedAt &&
+        expense.status === 'confirmed' &&
+        months.has(monthKeyOf(expense.occurredAt, utcOffset)),
+    ),
+  );
 }
 
 export interface DailyPoint {

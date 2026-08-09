@@ -664,6 +664,7 @@
   let agregandoPersona = false;
   let personaDetalle = null;
   let correoPersonaEditando = null;
+  let rangoCategorias = 6;
 
   /** Unico punto de escritura: aplica el cambio, persiste y redibuja. */
   function mutar(cambio) {
@@ -916,6 +917,7 @@
         ${bloqueRitmo(resumen)}
         ${bloqueMeses()}
       </div>
+      ${bloqueCategoriasHistorico()}
     `;
   }
 
@@ -1226,6 +1228,51 @@
               .join('')}
           </div>
         </div>
+      </section>`;
+  }
+
+  function bloqueCategoriasHistorico() {
+    const count = rangoCategorias === 'todo' ? null : rangoCategorias;
+    const filas = M.categoryDistributionRange(gastosVivos(), mes, { utcOffset: OFFSET, count });
+    const rotulo = rangoCategorias === 'todo' ? 'Todo el historial' : `Últimos ${rangoCategorias} meses`;
+
+    return `
+      <section class="bloque">
+        <div class="bloque__cabeza">
+          <h2>Historial por categoría</h2>
+          <span class="rotulo">${rotulo} · tu parte</span>
+        </div>
+        <div class="segmentos segmentos--bloque" role="group" aria-label="Rango de meses">
+          ${[3, 6, 12, 'todo']
+            .map(
+              (rango) => `
+            <button type="button" class="segmento" data-rango-categorias="${rango}"
+                    aria-pressed="${String(rangoCategorias) === String(rango) ? 'true' : 'false'}">
+              ${rango === 'todo' ? 'Todo' : rango}
+            </button>`,
+            )
+            .join('')}
+        </div>
+        ${
+          filas.length === 0
+            ? sinNada('Sin gastos en este rango.')
+            : `<div class="tarjeta">
+                 ${filas
+                   .map((c) => {
+                     const parte = Math.round(c.share * 100);
+                     return `
+                       <div class="categoria">
+                         <div class="categoria__nombre">
+                           <i class="categoria__mecha" style="background:${colorCategoria(c.categoryId)}"></i>
+                           <span>${escapar(nombreCategoria(c.categoryId))}</span>
+                         </div>
+                         <div class="categoria__cifra">${plata(c.spentCents)}</div>
+                         <div class="categoria__nota">${parte}% · ${c.expenseCount} movimiento${c.expenseCount === 1 ? '' : 's'}</div>
+                       </div>`;
+                   })
+                   .join('')}
+               </div>`
+        }
       </section>`;
   }
 
@@ -3307,6 +3354,14 @@
     const paso = objetivo.closest('[data-mes]');
     if (paso) {
       mes = M.addMonths(mes, Number(paso.dataset.mes));
+      pintar();
+      return;
+    }
+
+    const rangoCat = objetivo.closest('[data-rango-categorias]');
+    if (rangoCat) {
+      const valor = rangoCat.dataset.rangoCategorias;
+      rangoCategorias = valor === 'todo' ? 'todo' : Number(valor);
       pintar();
       return;
     }

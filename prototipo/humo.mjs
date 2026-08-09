@@ -85,6 +85,10 @@ comprobar(
 comprobar('el tablero muestra lo que queda', texto('#tablero').includes('Te queda para el mes'));
 comprobar('la barra marca el día de hoy', doc.querySelector('.barra__hoy') !== null);
 comprobar('aparece el desglose por categoría', texto('#lienzo').includes('En qué se te va'));
+comprobar('aparece historial por categoría', texto('#lienzo').includes('Historial por categoría'));
+comprobar('ofrece rangos de meses en el historial', doc.querySelector('[data-rango-categorias="6"]') !== null);
+clic('[data-rango-categorias="todo"]');
+comprobar('se puede ver todo el historial por categoría', texto('#lienzo').includes('Todo el historial'));
 comprobar('aparece quién te debe', texto('#lienzo').includes('Ana'));
 
 /* ── 3. El presupuesto solo cuenta mi parte ─────────────────────── */

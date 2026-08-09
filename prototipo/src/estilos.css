@@ -1532,6 +1532,10 @@ select.entrada {
   background: var(--superficie-3);
 }
 
+.segmentos--bloque {
+  margin-bottom: 12px;
+}
+
 .segmento {
   border: 0;
   border-radius: 6px;
