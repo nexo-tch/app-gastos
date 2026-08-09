@@ -83,8 +83,11 @@ comprobar(
   guardado().instancias.filter((i) => i.status === 'planned').length === 2,
 );
 comprobar('el tablero muestra lo que queda', texto('#tablero').includes('Te queda para el mes'));
+comprobar('el tablero en resumen es completo', doc.getElementById('tablero').dataset.modo === 'completo');
 comprobar('la barra marca el día de hoy', doc.querySelector('.barra__hoy') !== null);
 comprobar('aparece el desglose por categoría', texto('#lienzo').includes('En qué se te va'));
+comprobar('el resumen muestra gráfica de categorías', doc.querySelector('.dona') !== null);
+comprobar('el resumen muestra barra de distribución', doc.querySelector('.distribucion') !== null);
 comprobar('aparece historial por categoría', texto('#lienzo').includes('Historial por categoría'));
 comprobar('ofrece rangos de meses en el historial', doc.querySelector('[data-rango-categorias="6"]') !== null);
 clic('[data-rango-categorias="todo"]');
@@ -133,7 +136,8 @@ comprobar('guarda solo mi parte aparte', ultimo.myShareCents === 3000000, String
 
 clic('.pestana[data-vista="personas"]');
 comprobar('la vista de personas lista a Ana', texto('#lienzo').includes('Ana'));
-comprobar('Personas no muestra el tablero del mes', doc.getElementById('tablero').hidden === true);
+comprobar('Personas muestra tablero lite', doc.getElementById('tablero').dataset.modo === 'lite');
+comprobar('Personas sigue mostrando lo que queda', texto('#tablero').includes('Te queda para el mes'));
 comprobar('la lista de personas es compacta', doc.querySelector('.persona-fila') !== null);
 comprobar(
   'el desglose por categoría no está en la lista',
@@ -142,7 +146,7 @@ comprobar(
 
 const ana = guardado().personas.find((p) => p.name === 'Ana');
 clic(`[data-ver-persona="${ana.id}"]`);
-comprobar('el detalle tampoco muestra el tablero del mes', doc.getElementById('tablero').hidden === true);
+comprobar('el detalle de persona mantiene tablero lite', doc.getElementById('tablero').dataset.modo === 'lite');
 comprobar(
   'te debe desglosado por categoría en el detalle',
   doc.querySelector('.persona__por-categoria') !== null,
@@ -412,10 +416,12 @@ comprobar(
   texto('#tablero').slice(0, 60),
 );
 comprobar('avisa que los fijos no caben', texto('#tablero').includes('Te faltan para los fijos'));
+clic('.pestana[data-vista="resumen"]');
 comprobar(
   'explica cómo arreglarlo',
   texto('#tablero').includes('no caben en los') && texto('#tablero').includes('ajusta algún fijo'),
 );
+clic('.pestana[data-vista="presupuesto"]');
 
 // El otro extremo: gastar de verdad más de lo que hay sí debe decir "te pasaste".
 escribir('[data-presupuesto-total]', enPesos(gastadoDelMes / 2), 'change');

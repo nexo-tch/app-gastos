@@ -787,15 +787,16 @@
 
   /* ══ Tablero: la barra del mes ═══════════════════════════════════ */
 
-  function pintarTablero(resumen) {
+  function pintarTablero(resumen, modo = 'completo') {
     const caja = document.getElementById('tablero-caja');
+    const tablero = document.getElementById('tablero');
+    const lite = modo === 'lite';
+    tablero.dataset.modo = modo;
+
     const esMesActual = mes === M.monthKeyOf(new Date(), OFFSET);
     const debo = porPagar();
 
-    // El estado tiñe la tarjeta entera: verde mientras todo va bien, ámbar
-    // cuando aprieta y rojo cuando ya no alcanza. Es la señal que se lee de
-    // lejos, antes de leer un solo número.
-    document.getElementById('tablero').dataset.estado = resumen.hasBudget ? resumen.state : 'ok';
+    tablero.dataset.estado = resumen.hasBudget ? resumen.state : 'ok';
 
     const base = Math.max(
       resumen.budgetedCents,
@@ -816,8 +817,6 @@
           : ' · mes cerrado')
       : 'Sin presupuesto todavía. Di con cuánta plata cuentas este mes para saber cuánto te queda.';
 
-    // Quedarse corto por haber gastado de más y quedarse corto porque los fijos
-    // no caben son dos problemas distintos, y se arreglan de forma distinta.
     const gasteDeMas = resumen.spentCents > resumen.budgetedCents;
     const fijosNoCaben = resumen.hasBudget && resumen.availableCents < 0 && !gasteDeMas;
 
@@ -852,7 +851,67 @@
              por ${plata(resumen.pendingReviewCents)}. Todavía no consumen presupuesto.</p>`
         : '';
 
-    caja.innerHTML = `
+    const leyendaLite = `
+      <div class="barra__leyenda">
+        <span class="barra__clave">
+          <i class="barra__muestra"></i> Gastado <b>${plata(resumen.spentCents)}</b>
+        </span>
+        ${
+          resumen.hasBudget
+            ? `<span class="barra__clave">
+                 <i class="barra__muestra barra__muestra--libre"></i> Libre <b>${plata(libre)}</b>
+               </span>`
+            : ''
+        }
+      </div>`;
+
+    const leyendaCompleta = `
+      <div class="barra__leyenda">
+        <span class="barra__clave">
+          <i class="barra__muestra"></i> Gastado <b>${plata(resumen.spentCents)}</b>
+        </span>
+        <span class="barra__clave">
+          <i class="barra__muestra barra__muestra--comprometido"></i> Fijos por pagar
+          <b>${plata(resumen.committedCents)}</b>
+        </span>
+        <span class="barra__clave">
+          <i class="barra__muestra barra__muestra--libre"></i> Libre <b>${plata(libre)}</b>
+        </span>
+        ${
+          resumen.othersShareCents > 0
+            ? `<span class="barra__clave">De otros <b>${plata(resumen.othersShareCents)}</b></span>`
+            : ''
+        }
+        ${
+          debo.totalPendingCents > 0
+            ? `<span class="barra__clave barra__clave--debo">Yo debo <b>${plata(debo.totalPendingCents)}</b></span>`
+            : ''
+        }
+      </div>`;
+
+    caja.innerHTML = lite
+      ? `
+      <div class="tablero__titular tablero__titular--lite">
+        <div>
+          <div class="rotulo">${titular}</div>
+          <div class="tablero__monto cifra">${plata(monto)}</div>
+        </div>
+        ${
+          resumen.hasBudget
+            ? `<div class="tablero__sub">${plata(resumen.budgetedCents)} presupuestados</div>`
+            : ''
+        }
+      </div>
+
+      <div class="barra" data-estado="${resumen.state}">
+        <div class="barra__pista">
+          <span class="barra__seg barra__seg--gastado" style="width:${anchoGastado}%"></span>
+          <span class="barra__seg barra__seg--comprometido" style="width:${anchoFijos}%"></span>
+        </div>
+        ${esMesActual ? `<span class="barra__hoy" style="left:${posicionHoy}%"></span>` : ''}
+        ${leyendaLite}
+      </div>`
+      : `
       <div class="tablero__titular">
         <div>
           <div class="rotulo">${titular}</div>
@@ -867,33 +926,77 @@
           <span class="barra__seg barra__seg--comprometido" style="width:${anchoFijos}%"></span>
         </div>
         ${esMesActual ? `<span class="barra__hoy" style="left:${posicionHoy}%"></span>` : ''}
-        <div class="barra__leyenda">
-          <span class="barra__clave">
-            <i class="barra__muestra"></i> Gastado <b>${plata(resumen.spentCents)}</b>
-          </span>
-          <span class="barra__clave">
-            <i class="barra__muestra barra__muestra--comprometido"></i> Fijos por pagar
-            <b>${plata(resumen.committedCents)}</b>
-          </span>
-          <span class="barra__clave">
-            <i class="barra__muestra barra__muestra--libre"></i> Libre <b>${plata(libre)}</b>
-          </span>
-          ${
-            resumen.othersShareCents > 0
-              ? `<span class="barra__clave">De otros <b>${plata(resumen.othersShareCents)}</b></span>`
-              : ''
-          }
-          ${
-            debo.totalPendingCents > 0
-              ? `<span class="barra__clave barra__clave--debo">Yo debo <b>${plata(debo.totalPendingCents)}</b></span>`
-              : ''
-          }
-        </div>
+        ${leyendaCompleta}
       </div>
       ${noCaben}
       ${proyeccion}
-      ${pendientes}
-    `;
+      ${pendientes}`;
+  }
+
+  function arcoDonut(cx, cy, radioExt, radioInt, inicioGrados, barridoGrados, color) {
+    if (barridoGrados <= 0.05) return '';
+    const finGrados = inicioGrados + barridoGrados;
+    const a0 = (inicioGrados * Math.PI) / 180;
+    const a1 = (finGrados * Math.PI) / 180;
+    const x0o = cx + radioExt * Math.cos(a0);
+    const y0o = cy + radioExt * Math.sin(a0);
+    const x1o = cx + radioExt * Math.cos(a1);
+    const y1o = cy + radioExt * Math.sin(a1);
+    const x1i = cx + radioInt * Math.cos(a1);
+    const y1i = cy + radioInt * Math.sin(a1);
+    const x0i = cx + radioInt * Math.cos(a0);
+    const y0i = cy + radioInt * Math.sin(a0);
+    const grande = barridoGrados > 180 ? 1 : 0;
+    return `<path d="M ${x0o.toFixed(2)} ${y0o.toFixed(2)} A ${radioExt} ${radioExt} 0 ${grande} 1 ${x1o.toFixed(2)} ${y1o.toFixed(2)} L ${x1i.toFixed(2)} ${y1i.toFixed(2)} A ${radioInt} ${radioInt} 0 ${grande} 0 ${x0i.toFixed(2)} ${y0i.toFixed(2)} Z" fill="${color}" />`;
+  }
+
+  function graficaDonutCategorias(filas, totalGastado) {
+    if (totalGastado <= 0) return '';
+
+    const segmentos = filas.filter((c) => c.spentCents > 0);
+    if (segmentos.length === 0) return '';
+
+    const cx = 64;
+    const cy = 64;
+    const radioExt = 54;
+    const radioInt = 34;
+    let angulo = -90;
+
+    const arcos = segmentos
+      .map((c) => {
+        const barrido = (c.spentCents / totalGastado) * 360;
+        const arco = arcoDonut(cx, cy, radioExt, radioInt, angulo, barrido, colorCategoria(c.categoryId));
+        angulo += barrido;
+        return arco;
+      })
+      .join('');
+
+    return `
+      <div class="dona" aria-hidden="true">
+        <svg class="dona__svg" viewBox="0 0 128 128">
+          ${arcos}
+        </svg>
+        <div class="dona__centro">
+          <span class="dona__total cifra">${plata(totalGastado)}</span>
+          <span class="dona__etiqueta">gastado</span>
+        </div>
+      </div>`;
+  }
+
+  function barraDistribucionCategorias(filas, totalGastado) {
+    const segmentos = filas.filter((c) => c.spentCents > 0);
+    if (segmentos.length === 0 || totalGastado <= 0) return '';
+
+    return `
+      <div class="distribucion" role="img" aria-label="Distribución del gasto por categoría">
+        ${segmentos
+          .map((c) => {
+            const ancho = (c.spentCents / totalGastado) * 100;
+            return `<span class="distribucion__trozo" style="width:${ancho}%;background:${colorCategoria(c.categoryId)}"
+                          title="${escapar(nombreCategoria(c.categoryId))}: ${plata(c.spentCents)}"></span>`;
+          })
+          .join('')}
+      </div>`;
   }
 
   /* ══ Vista: resumen ══════════════════════════════════════════════ */
@@ -942,6 +1045,8 @@
     }
 
     const total = resumen.spentCents;
+    const grafica = graficaDonutCategorias(filas, total);
+    const distribucion = barraDistribucionCategorias(filas, total);
 
     return `
       <section class="bloque">
@@ -949,37 +1054,75 @@
           <h2>En qué se te va</h2>
           <span class="rotulo">Solo tu parte</span>
         </div>
-        <div class="tarjeta">
-          ${filas
-            .map((c) => {
-              const consumido = c.spentCents + c.committedCents;
-              const porcentaje = c.ratio !== null ? Math.min(c.ratio * 100, 100) : 0;
-              const parte = total > 0 ? Math.round((c.spentCents / total) * 100) : 0;
+        ${
+          grafica || distribucion
+            ? `<div class="categorias-panel">
+                 ${grafica}
+                 <div class="categorias-panel__detalle">
+                   ${distribucion}
+                   <div class="tarjeta categorias-panel__lista">
+                     ${filas
+                       .map((c) => {
+                         const consumido = c.spentCents + c.committedCents;
+                         const porcentaje = c.ratio !== null ? Math.min(c.ratio * 100, 100) : 0;
+                         const parte = total > 0 ? Math.round((c.spentCents / total) * 100) : 0;
+                         const nota = notaCategoria(c, parte);
 
-              const nota = notaCategoria(c, parte);
+                         return `
+                           <div class="categoria">
+                             <div class="categoria__nombre">
+                               <i class="categoria__mecha" style="background:${colorCategoria(c.categoryId)}"></i>
+                               <span>${escapar(nombreCategoria(c.categoryId))}</span>
+                             </div>
+                             <div class="categoria__cifra">
+                               ${plata(consumido)}
+                               ${c.limitCents !== null ? `<small> / ${plata(c.limitCents)}</small>` : ''}
+                             </div>
+                             ${
+                               c.limitCents !== null
+                                 ? `<div class="medidor">
+                                      <span class="medidor__relleno" data-estado="${c.state}" style="width:${porcentaje}%"></span>
+                                    </div>`
+                                 : ''
+                             }
+                             <div class="categoria__nota" data-estado="${c.state}">${nota}</div>
+                           </div>`;
+                       })
+                       .join('')}
+                   </div>
+                 </div>
+               </div>`
+            : `<div class="tarjeta">
+                 ${filas
+                   .map((c) => {
+                     const consumido = c.spentCents + c.committedCents;
+                     const porcentaje = c.ratio !== null ? Math.min(c.ratio * 100, 100) : 0;
+                     const parte = total > 0 ? Math.round((c.spentCents / total) * 100) : 0;
+                     const nota = notaCategoria(c, parte);
 
-              return `
-                <div class="categoria">
-                  <div class="categoria__nombre">
-                    <i class="categoria__mecha" style="background:${colorCategoria(c.categoryId)}"></i>
-                    <span>${escapar(nombreCategoria(c.categoryId))}</span>
-                  </div>
-                  <div class="categoria__cifra">
-                    ${plata(consumido)}
-                    ${c.limitCents !== null ? `<small> / ${plata(c.limitCents)}</small>` : ''}
-                  </div>
-                  ${
-                    c.limitCents !== null
-                      ? `<div class="medidor">
-                           <span class="medidor__relleno" data-estado="${c.state}" style="width:${porcentaje}%"></span>
-                         </div>`
-                      : ''
-                  }
-                  <div class="categoria__nota" data-estado="${c.state}">${nota}</div>
-                </div>`;
-            })
-            .join('')}
-        </div>
+                     return `
+                       <div class="categoria">
+                         <div class="categoria__nombre">
+                           <i class="categoria__mecha" style="background:${colorCategoria(c.categoryId)}"></i>
+                           <span>${escapar(nombreCategoria(c.categoryId))}</span>
+                         </div>
+                         <div class="categoria__cifra">
+                           ${plata(consumido)}
+                           ${c.limitCents !== null ? `<small> / ${plata(c.limitCents)}</small>` : ''}
+                         </div>
+                         ${
+                           c.limitCents !== null
+                             ? `<div class="medidor">
+                                  <span class="medidor__relleno" data-estado="${c.state}" style="width:${porcentaje}%"></span>
+                                </div>`
+                             : ''
+                         }
+                         <div class="categoria__nota" data-estado="${c.state}">${nota}</div>
+                       </div>`;
+                   })
+                   .join('')}
+               </div>`
+        }
       </section>`;
   }
 
@@ -1828,12 +1971,8 @@
     document.getElementById('mes-nombre').textContent = nombreMes(mes);
 
     const tablero = document.getElementById('tablero');
-    if (vista === 'personas') {
-      tablero.hidden = true;
-    } else {
-      tablero.hidden = false;
-      pintarTablero(resumen);
-    }
+    tablero.hidden = false;
+    pintarTablero(resumen, vista === 'resumen' ? 'completo' : 'lite');
 
     document.querySelectorAll('.pestana').forEach((boton) => {
       const activa = boton.dataset.vista === vista;
