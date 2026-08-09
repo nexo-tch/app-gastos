@@ -1233,7 +1233,7 @@
             Agregar persona
           </button>
           <button type="button" class="boton boton--marco" data-abrir-debo ${agregandoPersona ? 'hidden' : ''}>
-            Registrar que le debo
+            Registrar deuda
           </button>
           <form class="linea-alta" data-nueva-persona ${agregandoPersona ? '' : 'hidden'}>
             <input class="entrada" name="nombre" placeholder="Nombre de la persona" style="max-width:220px" required />
@@ -1340,16 +1340,18 @@
           ${saldos
             .map((s) => `<span class="persona__saldo" data-signo="${s.signo}">${s.texto}</span>`)
             .join('')}
-          ${
-            pendienteCobrar > 0
-              ? `<button type="button" class="boton boton--marco boton--chico" data-abonar="${persona.id}">
-                   Registrar abono
-                 </button>`
-              : ''
-          }
-          <button type="button" class="boton boton--fantasma boton--chico" data-debo-persona="${persona.id}">
-            Le debo algo
-          </button>
+          <div class="persona__acciones">
+            ${
+              pendienteCobrar > 0
+                ? `<button type="button" class="boton boton--marco boton--chico" data-abonar="${persona.id}">
+                     Registrar abono
+                   </button>`
+                : ''
+            }
+            <button type="button" class="boton boton--marco boton--chico" data-debo-persona="${persona.id}">
+              Registrar deuda
+            </button>
+          </div>
           ${
             usada
               ? ''

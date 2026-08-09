@@ -914,6 +914,15 @@ button {
   margin-right: auto;
 }
 
+.persona__acciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 1 1 100%;
+  padding-left: 42px;
+}
+
 .persona__nombre {
   font-size: 14px;
   font-weight: 600;
