@@ -62,4 +62,10 @@ export const MIGRACIONES: Migracion[] = [
       "ALTER TABLE \"repartos\" ADD COLUMN \"avisado_en\" timestamp with time zone;",
     ],
   },
+  {
+    nombre: "0004_repartos_aceptado",
+    sentencias: [
+      "ALTER TABLE \"repartos\" ADD COLUMN \"aceptado_en\" timestamp with time zone;",
+    ],
+  },
 ];

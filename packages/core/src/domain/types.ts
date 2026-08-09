@@ -58,6 +58,7 @@ export const expenseSplitSchema = z.object({
   amountCents: nonNegativeCents,
   note: z.string().nullish(),
   notifiedAt: isoDate.nullish(),
+  acceptedAt: isoDate.nullish(),
 });
 export type ExpenseSplit = z.infer<typeof expenseSplitSchema>;
 

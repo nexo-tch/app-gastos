@@ -111,6 +111,7 @@ const repartoSchema = z.object({
   personId: identificador,
   amountCents: centavos,
   notifiedAt: fecha.nullish(),
+  acceptedAt: fecha.nullish(),
 });
 type Reparto = z.input<typeof repartoSchema>;
 
@@ -350,6 +351,7 @@ export async function leerEstado(usuarioId: string): Promise<Estado> {
       personId: r.personaId,
       amountCents: r.monto,
       notifiedAt: iso(r.avisadoEn),
+      acceptedAt: iso(r.aceptadoEn),
     })),
     abonos: abonos.map((a) => ({
       id: a.id,
@@ -574,6 +576,7 @@ export async function aplicarCambios(
         personaId: r.personId,
         monto: r.amountCents,
         avisadoEn: r.notifiedAt,
+        aceptadoEn: r.acceptedAt,
       })),
     );
 

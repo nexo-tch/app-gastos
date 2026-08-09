@@ -334,6 +334,29 @@
         if (!confirmado && vigente) estrenar(vigente);
         else programar(0);
       });
+      addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') refrescar();
+      });
+    }
+
+    async function refrescar() {
+      if (!conCuenta || enviando || !confirmado) return;
+
+      try {
+        const respuesta = await fetchCuenta('/api/estado', { headers: { accept: 'application/json' } });
+        if (respuesta.status === 401) {
+          location.href = '/entrar';
+          return;
+        }
+        if (!respuesta.ok) return;
+
+        const cuerpo = await respuesta.json();
+        if (cuerpo.revision !== revision || firma(cuerpo.datos) !== firma(confirmado)) {
+          adoptar(cuerpo.datos, cuerpo.revision);
+        }
+      } catch (error) {
+        console.warn('No se pudo refrescar la cuenta', error);
+      }
     }
 
     return {
@@ -364,6 +387,7 @@
       },
 
       estrenar,
+      refrescar,
     };
   })();
 
@@ -1375,6 +1399,7 @@
     const titulo = `${escapar(nombreDelGasto(item.expenseId, nombreCategoria(item.categoryId)))} · ${escapar(nombreDia(diaDeIso(item.occurredAt)))}`;
     const reparto = datos.repartos.find((r) => r.id === item.splitId);
     const yaAvisado = Boolean(reparto?.notifiedAt);
+    const aceptado = Boolean(reparto?.acceptedAt);
     return `
       <div class="deuda ${item.isSettled ? 'deuda--saldada' : ''}">
         <button type="button" class="deuda__principal" data-gasto="${item.expenseId}">
@@ -1384,13 +1409,15 @@
         ${
           item.isSettled
             ? ''
-            : yaAvisado
-              ? `<button type="button" class="boton boton--fantasma boton--chico"
-                         data-recordar="${item.splitId}"
-                         aria-label="Recordarle a ${escapar(persona.name)}">Recordar</button>`
-              : `<button type="button" class="boton boton--fantasma boton--chico"
-                         data-avisar="${item.splitId}"
-                         aria-label="Avisarle a ${escapar(persona.name)}">Avisar</button>`
+            : aceptado
+              ? `<span class="deuda__estado">Aceptado</span>`
+              : yaAvisado
+                ? `<button type="button" class="boton boton--fantasma boton--chico"
+                           data-recordar="${item.splitId}"
+                           aria-label="Recordarle a ${escapar(persona.name)}">Recordar</button>`
+                : `<button type="button" class="boton boton--fantasma boton--chico"
+                           data-avisar="${item.splitId}"
+                           aria-label="Avisarle a ${escapar(persona.name)}">Avisar</button>`
         }
       </div>`;
   }
@@ -2080,8 +2107,21 @@
     if (location.hash) history.replaceState(null, '', location.pathname + location.search);
   };
 
+  function idCompartidoDeCarga(carga) {
+    return carga?.i ? `compartido-${carga.i}` : null;
+  }
+
+  function compartidoYaRegistrado(carga) {
+    const idDeuda = idCompartidoDeCarga(carga);
+    if (!idDeuda) return false;
+    const idGasto = `${idDeuda}${SUFIJO_GASTO_DEUDA}`;
+    if (datos.deudas.some((d) => d.id === idDeuda)) return true;
+    return datos.gastos.some((g) => g.id === idGasto && !g.deletedAt);
+  }
+
   function abrirRecibido(carga) {
     recibido = carga;
+    const yaRegistrado = compartidoYaRegistrado(carga);
 
     const sugerida = carga.k
       ? categoriasActivas().find((c) => c.name.toLowerCase() === carga.k.toLowerCase())
@@ -2089,16 +2129,23 @@
     categoriaRecibido = sugerida?.id ?? categoriasActivas()[0]?.id ?? null;
 
     const quien = carga.de || 'Alguien';
-    document.getElementById('titulo-recibido').textContent = `${quien} te compartió un gasto`;
+    document.getElementById('titulo-recibido').textContent = yaRegistrado
+      ? 'Ya lo tienes registrado'
+      : `${quien} te compartió un gasto`;
     document.getElementById('recibido-resumen').innerHTML =
       `<b>${escapar(carga.q || 'Un gasto')}</b> · ${escapar(nombreDia(carga.d))}<br />` +
       `Tu parte es <b class="cifra">${plata(carga.c)}</b>` +
       (carga.t > carga.c ? ` de ${plata(carga.t)}` : '');
-    document.getElementById('recibido-explicacion').textContent =
-      `Si lo agregas, esos ${plata(carga.c)} entran en tu presupuesto de este mes y queda ` +
-      `apuntado que se los debes a ${quien}.`;
+    document.getElementById('recibido-explicacion').textContent = yaRegistrado
+      ? 'Este gasto ya está en tus cuentas. No hace falta agregarlo otra vez.'
+      : `Si lo agregas, esos ${plata(carga.c)} entran en tu presupuesto de este mes y queda ` +
+        `apuntado que se los debes a ${quien}.`;
 
-    pintarCategoriasRecibido();
+    document.getElementById('recibido-categorias').closest('fieldset').hidden = yaRegistrado;
+    document.getElementById('recibido-agregar').hidden = yaRegistrado;
+    document.getElementById('recibido-descartar').textContent = yaRegistrado ? 'Cerrar' : 'Descartar';
+
+    if (!yaRegistrado) pintarCategoriasRecibido();
     dialogoRecibido.showModal();
   }
 
@@ -2177,15 +2224,42 @@
     else d.deudas.push(deuda);
   }
 
+  async function notificarAceptacionCompartido(carga) {
+    if (!carga?.i || !carga?.dc || !almacen.conCuenta) return;
+
+    try {
+      await fetch('/api/compartido/aceptado', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          repartoId: carga.i,
+          emisorCorreo: carga.dc,
+          montoCentavos: carga.c,
+        }),
+      });
+    } catch (error) {
+      console.warn('No se pudo avisar al emisor del enlace', error);
+    }
+  }
+
   function aceptarRecibido() {
     const carga = recibido;
     if (!carga) return;
+
+    if (compartidoYaRegistrado(carga)) {
+      avisar('Este gasto ya está en tus cuentas.');
+      recibido = null;
+      olvidarEnlace();
+      dialogoRecibido.close();
+      return;
+    }
 
     const nombre = carga.de || 'Quien te compartió';
 
     // Los identificadores salen del enlace, así que abrirlo dos veces reescribe
     // las mismas dos filas en vez de duplicar el gasto y la deuda.
-    const idDeuda = carga.i ? `compartido-${carga.i}` : id();
+    const idDeuda = idCompartidoDeCarga(carga) ?? id();
 
     // Que se vea dónde quedó: es la pantalla que ahora dice que le debes.
     vista = 'personas';
@@ -2224,6 +2298,7 @@
     olvidarEnlace();
     dialogoRecibido.close();
     avisar(`Listo: le debes ${plata(carga.c)} a ${nombre}`);
+    notificarAceptacionCompartido(carga);
   }
 
   /* ══ Correo de cuenta de una persona ═════════════════════════════ */
@@ -2471,6 +2546,7 @@
           personId: parte.personId,
           amountCents: parte.amountCents,
           notifiedAt: previo && mismoMonto ? (previo.notifiedAt ?? null) : null,
+          acceptedAt: previo && mismoMonto ? (previo.acceptedAt ?? null) : null,
         });
       }
     });

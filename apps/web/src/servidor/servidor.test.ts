@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { cifrar, coincide } from './claves.js';
+import { CompartidoInvalido, marcarCompartidoAceptado } from './compartido.js';
 import { comprobarClave, crearCuenta } from './cuentas.js';
 import { RevisionVieja, aplicarCambios, cambiosSchema, leerEstado, subirEstadoCompleto } from './estado.js';
 import { borrarSesion, nuevaSesion, usuarioDeToken } from './sesion.js';
@@ -314,6 +315,94 @@ describe('dos cuentas no se tocan', () => {
 
     expect((await leerEstado(yo)).gastos).toHaveLength(1);
     expect((await leerEstado(otro)).gastos).toHaveLength(0);
+  });
+});
+
+describe('compartido aceptado', () => {
+  it('marca el reparto del emisor con la clave del enlace', async () => {
+    const emisorId = await registrar('emisor@ejemplo.com');
+
+    await aplicarCambios(
+      emisorId,
+      0,
+      cambios({
+        personas: {
+          puestos: [{ id: 'ana', name: 'Ana', email: 'ana@ejemplo.com', posicion: 0 }],
+        },
+        gastos: {
+          puestos: [
+            {
+              id: 'g1',
+              categoryId: 'mercado',
+              amountTotalCents: 6000000,
+              myShareCents: 3000000,
+              merchantRaw: 'Cena',
+              occurredAt: '2026-08-02T12:00:00-05:00',
+            },
+          ],
+        },
+        repartos: {
+          puestos: [
+            {
+              id: 'split-abc',
+              expenseId: 'g1',
+              personId: 'ana',
+              amountCents: 3000000,
+            },
+          ],
+        },
+      }),
+    );
+
+    const actualizado = await marcarCompartidoAceptado({
+      repartoId: 'split-abc',
+      emisorCorreo: 'emisor@ejemplo.com',
+      montoCentavos: 3000000,
+    });
+
+    expect(actualizado).toBe(true);
+    expect((await leerEstado(emisorId)).repartos[0]?.acceptedAt).toBeTruthy();
+  });
+
+  it('rechaza montos que no coinciden', async () => {
+    const emisorId = await registrar('otro-emisor@ejemplo.com');
+
+    await aplicarCambios(
+      emisorId,
+      0,
+      cambios({
+        gastos: {
+          puestos: [
+            {
+              id: 'g1',
+              categoryId: 'mercado',
+              amountTotalCents: 6000000,
+              myShareCents: 3000000,
+              merchantRaw: 'Cena',
+              occurredAt: '2026-08-02T12:00:00-05:00',
+            },
+          ],
+        },
+        repartos: {
+          puestos: [
+            {
+              id: 'split-xyz',
+              expenseId: 'g1',
+              personId: 'ana',
+              amountCents: 3000000,
+            },
+          ],
+        },
+      }),
+    );
+
+    await expect(
+      marcarCompartidoAceptado({
+        repartoId: 'split-xyz',
+        emisorCorreo: 'otro-emisor@ejemplo.com',
+        montoCentavos: 9999999,
+      }),
+    ).rejects.toBeInstanceOf(CompartidoInvalido);
   });
 });
 

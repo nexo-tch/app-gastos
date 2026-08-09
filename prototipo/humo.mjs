@@ -569,7 +569,14 @@ async function revisarRecibido(enlace, delQueComparte) {
 
   // Un enlace se reenvía, se abre dos veces, se toca sin querer.
   ventana = abrir(suEstado);
-  suClic('#recibido-agregar');
+  comprobar(
+    'el enlace ya registrado lo dice en el título',
+    suTexto('#titulo-recibido').includes('registrado'),
+  );
+  comprobar(
+    'no ofrece agregarlo otra vez',
+    ventana.document.querySelector('#recibido-agregar').hidden === true,
+  );
 
   comprobar(
     'abrir el mismo enlace otra vez no duplica el gasto ni la deuda',
