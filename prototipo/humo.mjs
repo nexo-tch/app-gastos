@@ -129,6 +129,10 @@ comprobar('guarda solo mi parte aparte', ultimo.myShareCents === 3000000, String
 
 clic('.pestana[data-vista="personas"]');
 comprobar('la vista de personas lista a Ana', texto('#lienzo').includes('Ana'));
+comprobar(
+  'te debe desglosado por categoría',
+  doc.querySelector('.persona__por-categoria') !== null,
+);
 const tarjetaAna = [...doc.querySelectorAll('#lienzo .persona')].find((n) =>
   n.querySelector('.persona__nombre')?.textContent.includes('Ana'),
 );

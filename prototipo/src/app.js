@@ -1437,6 +1437,43 @@
       </section>`;
   }
 
+  function totalesPorCategoria(items, categoriaDe, montoDe) {
+    const map = new Map();
+    for (const item of items) {
+      const monto = montoDe(item);
+      if (!monto) continue;
+      const id = categoriaDe(item) ?? 'sin-categoria';
+      map.set(id, (map.get(id) ?? 0) + monto);
+    }
+    return [...map.entries()]
+      .map(([categoryId, totalCents]) => ({ categoryId, totalCents }))
+      .sort((a, b) => b.totalCents - a.totalCents);
+  }
+
+  function categoriaDeDeuda(deuda) {
+    const gasto = datos.gastos.find((g) => g.id === `${deuda.id}-gasto` && !g.deletedAt);
+    return gasto?.categoryId ?? null;
+  }
+
+  function resumenCategoriasPersona(grupos) {
+    if (grupos.length === 0) return '';
+    return `
+      <div class="persona__por-categoria">
+        ${grupos
+          .map(
+            (grupo) => `
+          <div class="persona__categoria-fila">
+            <span class="persona__categoria-etiqueta">
+              <i class="categoria__mecha" style="background:${colorCategoria(grupo.categoryId)}"></i>
+              ${escapar(nombreCategoria(grupo.categoryId))}
+            </span>
+            <span class="persona__categoria-monto cifra">${plata(grupo.totalCents)}</span>
+          </div>`,
+          )
+          .join('')}
+      </div>`;
+  }
+
   function tarjetaPersona(persona, cuentas, mias) {
     const cuenta = cuentas.byPerson.find((p) => p.personId === persona.id);
     const mio = mias.byPerson.find((p) => p.personId === persona.id);
@@ -1461,6 +1498,17 @@
       pendienteCobrar > 0 || itemsCobrar.length > 0 || (cuenta?.creditCents ?? 0) > 0;
     const hayBloquePagar = pendientePagar > 0 || itemsPagar.length > 0;
 
+    const porCategoriaCobrar = totalesPorCategoria(
+      (cuenta?.items ?? []).filter((item) => !item.isSettled && (item.pendingCents || item.amountCents) > 0),
+      (item) => item.categoryId,
+      (item) => item.pendingCents || item.amountCents,
+    );
+    const porCategoriaPagar = totalesPorCategoria(
+      (mio?.items ?? []).filter((d) => !d.settledAt && d.amountCents > 0),
+      categoriaDeDeuda,
+      (deuda) => deuda.amountCents,
+    );
+
     // Los montos viven en cada bloque; aquí solo decimos si está al día.
     const saldos = [];
     if (!hayBloqueCobrar && !hayBloquePagar) {
@@ -1473,6 +1521,7 @@
                <span class="persona__bloque-titulo">Te debe</span>
                <span class="persona__bloque-total cifra">${plata(pendienteCobrar)}</span>
              </div>
+             ${resumenCategoriasPersona(porCategoriaCobrar)}
              <div class="persona__bloque-lista">
                ${
                  itemsCobrar.length > 0
@@ -1497,6 +1546,7 @@
                <span class="persona__bloque-titulo">Le debes</span>
                <span class="persona__bloque-total cifra">${plata(pendientePagar)}</span>
              </div>
+             ${resumenCategoriasPersona(porCategoriaPagar)}
              <div class="persona__bloque-lista">
                ${
                  itemsPagar.length > 0
@@ -1587,7 +1637,8 @@
   }
 
   function filaDeudaPagar(deuda) {
-    const titulo = `${escapar(deuda.description || 'un gasto')} · ${escapar(nombreDia(diaDeIso(deuda.occurredAt)))}`;
+    const categoria = nombreCategoria(categoriaDeDeuda(deuda));
+    const titulo = `${escapar(deuda.description || 'un gasto')} · ${escapar(categoria)} · ${escapar(nombreDia(diaDeIso(deuda.occurredAt)))}`;
     return `
       <div class="deuda ${deuda.settledAt ? 'deuda--saldada' : ''}">
         <button type="button" class="deuda__principal" data-deuda="${deuda.id}">
