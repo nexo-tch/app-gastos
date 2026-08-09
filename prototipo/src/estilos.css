@@ -946,7 +946,26 @@ button {
 }
 
 .persona__correo {
-  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 100%;
+  margin-top: 2px;
+  padding-left: 42px;
+}
+
+.persona__correo--editar {
+  margin-top: 6px;
+}
+
+.persona__correo-valor {
+  font-size: 12px;
+  color: var(--texto-2);
+}
+
+.persona__correo-vacio {
+  font-size: 12px;
+  color: var(--texto-3);
 }
 
 .persona__correo .entrada {

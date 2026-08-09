@@ -129,6 +129,7 @@ comprobar('la vista de personas lista a Ana', texto('#lienzo').includes('Ana'));
 
 const ana = guardado().personas.find((p) => p.name === 'Ana');
 comprobar('Ana todavía no tiene correo', !ana?.email);
+clic(`[data-editar-correo-persona="${ana.id}"]`);
 doc.querySelector(`[data-correo-persona="${ana.id}"] [name="correo"]`).value = 'ana@ejemplo.com';
 doc.querySelector(`[data-correo-persona="${ana.id}"]`).dispatchEvent(
   new window.Event('submit', { bubbles: true, cancelable: true }),

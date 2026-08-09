@@ -481,6 +481,7 @@
   let mes = M.monthKeyOf(new Date(), OFFSET);
   let vista = 'resumen';
   let agregandoPersona = false;
+  let editandoCorreoPersona = null;
 
   /** Unico punto de escritura: aplica el cambio, persiste y redibuja. */
   function mutar(cambio) {
@@ -1324,6 +1325,29 @@
            </div>`
         : '';
 
+    const editandoCorreo = editandoCorreoPersona === persona.id;
+    const bloqueCorreo = editandoCorreo
+      ? `<form class="persona__correo persona__correo--editar linea-alta" data-correo-persona="${persona.id}">
+           <input class="entrada" name="correo" type="email" inputmode="email" autocomplete="email"
+                  value="${persona.email ? escapar(persona.email) : ''}"
+                  placeholder="Correo de su cuenta" />
+           <button type="submit" class="boton boton--solido boton--chico">Guardar</button>
+           <button type="button" class="boton boton--fantasma boton--chico" data-cancelar-correo-persona="${persona.id}">
+             Cancelar
+           </button>
+         </form>`
+      : `<div class="persona__correo">
+           ${
+             persona.email
+               ? `<span class="persona__correo-valor">${escapar(persona.email)}</span>`
+               : `<span class="persona__correo-vacio">Sin correo de cuenta</span>`
+           }
+           <button type="button" class="icono icono--mini" data-editar-correo-persona="${persona.id}"
+                   aria-label="${persona.email ? `Cambiar correo de ${escapar(persona.name)}` : `Asociar correo de ${escapar(persona.name)}`}">
+             ✎
+           </button>
+         </div>`;
+
     return `
       <div class="persona">
         <div class="persona__cabeza">
@@ -1347,14 +1371,8 @@
               ? ''
               : `<button type="button" class="icono" data-borrar-persona="${persona.id}" aria-label="Quitar a ${escapar(persona.name)}">✕</button>`
           }
+          ${bloqueCorreo}
         </div>
-
-        <form class="persona__correo linea-alta" data-correo-persona="${persona.id}">
-          <input class="entrada" name="correo" type="email" inputmode="email" autocomplete="email"
-                 value="${persona.email ? escapar(persona.email) : ''}"
-                 placeholder="Correo de su cuenta (opcional)" />
-          <button type="submit" class="boton boton--fantasma boton--chico">Guardar</button>
-        </form>
 
         ${bloqueCobrar || bloquePagar ? `<div class="persona__cuerpo">${bloqueCobrar}${bloquePagar}</div>` : ''}
       </div>`;
@@ -2503,7 +2521,10 @@
 
     const pestana = objetivo.closest('.pestana');
     if (pestana) {
-      if (pestana.dataset.vista !== 'personas') agregandoPersona = false;
+      if (pestana.dataset.vista !== 'personas') {
+        agregandoPersona = false;
+        editandoCorreoPersona = null;
+      }
       vista = pestana.dataset.vista;
       pintar();
       return;
@@ -2511,7 +2532,10 @@
 
     const ir = objetivo.closest('[data-ir]');
     if (ir) {
-      if (ir.dataset.ir !== 'personas') agregandoPersona = false;
+      if (ir.dataset.ir !== 'personas') {
+        agregandoPersona = false;
+        editandoCorreoPersona = null;
+      }
       vista = ir.dataset.ir;
       pintar();
       return;
@@ -2526,6 +2550,26 @@
 
     if (objetivo.closest('[data-cancelar-nueva-persona]')) {
       agregandoPersona = false;
+      pintar();
+      return;
+    }
+
+    const editarCorreoPersona = objetivo.closest('[data-editar-correo-persona]');
+    if (editarCorreoPersona) {
+      editandoCorreoPersona = editarCorreoPersona.dataset.editarCorreoPersona;
+      pintar();
+      setTimeout(
+        () =>
+          document
+            .querySelector(`[data-correo-persona="${editandoCorreoPersona}"] [name="correo"]`)
+            ?.focus(),
+        40,
+      );
+      return;
+    }
+
+    if (objetivo.closest('[data-cancelar-correo-persona]')) {
+      editandoCorreoPersona = null;
       pintar();
       return;
     }
@@ -3014,6 +3058,7 @@
         if (!persona) return;
         persona.email = correo ? normalizarCorreo(correo) : null;
       });
+      editandoCorreoPersona = null;
       avisar(correo ? 'Correo guardado' : 'Correo quitado');
       return;
     }
