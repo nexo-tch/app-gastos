@@ -48,6 +48,16 @@ async function conectar(): Promise<Base> {
     const cliente = postgres(url, { prepare: false, max: 1 });
     db = drizzle(cliente, { schema: esquema }) as unknown as Base;
   } else {
+    // Sin la variable, la app arrancaria sobre una base local que en un
+    // servidor sin disco ni siquiera se puede crear, y donde se pudiera se
+    // borraria con el siguiente despliegue. Mejor no arrancar y decir por que.
+    if (process.env.VERCEL) {
+      throw new Error(
+        'Falta DATABASE_APP_GASTOS_URL. En Vercel no hay disco para PGlite: ' +
+          'pon la cadena del pooler de Postgres en las variables del proyecto.',
+      );
+    }
+
     const [{ drizzle }, { PGlite }] = await Promise.all([
       import('drizzle-orm/pglite'),
       import('@electric-sql/pglite'),
@@ -72,24 +82,29 @@ async function conectar(): Promise<Base> {
  * Aplica lo que falte por aplicar. Corre al abrir la conexion, en los dos
  * motores, para que nadie tenga que acordarse de un paso previo.
  *
- * Con Postgres de verdad se pide antes un cerrojo: si el servidor arranca
- * varias instancias a la vez, todas intentan migrar y sin cerrojo se pisan.
- * La que lo consigue migra y las demas esperan y no encuentran nada que hacer.
+ * Todo va dentro de una transaccion, y eso no es un detalle: si una migracion
+ * se corta a la mitad sin transaccion, las tablas quedan creadas pero sin
+ * anotar, y a partir de ahi cada arranque vuelve a intentarlo y muere en la
+ * primera tabla que ya existe. La base queda envenenada para siempre.
+ *
+ * Con Postgres de verdad se pide ademas un cerrojo, porque el servidor levanta
+ * varias instancias a la vez y todas migran al arrancar. Es del ambito de la
+ * transaccion a proposito: detras de un pooler en modo transaccion, que es
+ * como sirven Supabase y Neon, cada sentencia suelta puede caer en una sesion
+ * distinta, y un cerrojo de sesion no estaria protegiendo nada.
  */
 export async function migrar(db: Base, { compartida = false } = {}): Promise<void> {
-  await db.execute(sql.raw(CREAR_BITACORA));
+  await db.transaction(async (tx) => {
+    if (compartida) await tx.execute(sql`SELECT pg_advisory_xact_lock(${CERROJO})`);
 
-  if (compartida) await db.execute(sql`SELECT pg_advisory_lock(${CERROJO})`);
+    await tx.execute(sql.raw(CREAR_BITACORA));
 
-  try {
-    const hechas = new Set((await db.select({ nombre: bitacora.nombre }).from(bitacora)).map((f) => f.nombre));
+    const hechas = new Set((await tx.select({ nombre: bitacora.nombre }).from(bitacora)).map((f) => f.nombre));
 
     for (const migracion of MIGRACIONES) {
       if (hechas.has(migracion.nombre)) continue;
-      for (const sentencia of migracion.sentencias) await db.execute(sql.raw(sentencia));
-      await db.insert(bitacora).values({ nombre: migracion.nombre });
+      for (const sentencia of migracion.sentencias) await tx.execute(sql.raw(sentencia));
+      await tx.insert(bitacora).values({ nombre: migracion.nombre });
     }
-  } finally {
-    if (compartida) await db.execute(sql`SELECT pg_advisory_unlock(${CERROJO})`);
-  }
+  });
 }
