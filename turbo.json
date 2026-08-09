@@ -1,5 +1,12 @@
 {
   "$schema": "https://turbo.build/schema.json",
+
+  // Las que escribe la integración de Neon en Vercel. No entran en el hash de
+  // la caché porque la compilación no las lee (la base solo se toca al servir),
+  // pero hay que nombrarlas: si no, turbo avisa en cada build de que hay
+  // variables del proyecto que no tiene en cuenta.
+  "globalPassThroughEnv": ["GASTOS_*"],
+
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

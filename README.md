@@ -44,7 +44,7 @@ npm install
 npm run dev
 ```
 
-Y ya está: `http://localhost:3000` pide crear una cuenta y entra. **No hace falta instalar Postgres.** Sin `DATABASE_APP_GASTOS_URL`, la app levanta [PGlite](https://pglite.dev), que es Postgres compilado a WebAssembly, y guarda la base en `.datos/dev`. Las migraciones se aplican solas al arrancar.
+Y ya está: `http://localhost:3000` pide crear una cuenta y entra. **No hace falta instalar Postgres.** Sin `GASTOS_DATABASE_URL`, la app levanta [PGlite](https://pglite.dev), que es Postgres compilado a WebAssembly, y guarda la base en `.datos/dev`. Las migraciones se aplican solas al arrancar.
 
 Es Postgres de verdad en los dos lados, y esa es la gracia: un solo esquema, un solo SQL y un solo juego de migraciones. Con SQLite en desarrollo habría dos de cada, y bugs que solo aparecen al desplegar.
 
@@ -54,7 +54,7 @@ Ninguna es obligatoria en desarrollo. Están documentadas en `apps/web/.env.exam
 
 | Variable | Para qué |
 | --- | --- |
-| `DATABASE_APP_GASTOS_URL` | El Postgres de producción. Si está, se usa; si no, PGlite. Con Supabase o Neon, la cadena del *pooler*. Lleva el nombre del proyecto porque la misma cuenta de Postgres puede servir a varias apps. |
+| `GASTOS_DATABASE_URL` | El Postgres de producción. Si está, se usa; si no, PGlite. Con Supabase o Neon, la cadena del *pooler*. Lleva el nombre del proyecto delante porque la misma cuenta de Postgres puede servir a varias apps; en Vercel es el prefijo que se le pone a la integración al conectarla. |
 | `PGLITE_DIR` | Dónde guarda PGlite en desarrollo. Por defecto `.datos/dev`. |
 
 ### Comprobar que todo está bien
