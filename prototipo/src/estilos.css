@@ -959,6 +959,106 @@ button {
 
 /* ── Personas y deudas ──────────────────────────────────────────── */
 
+.persona-fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-top: 1px solid var(--borde);
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.persona-fila:first-child {
+  border-top: 0;
+}
+
+.persona-fila:active {
+  background: var(--superficie-2);
+}
+
+.persona-fila__medio {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.persona-fila__nombre {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.persona-fila__resumen {
+  font-size: 12px;
+  color: var(--texto-3);
+}
+
+.persona-fila__neto {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.persona-fila__neto[data-signo='favor'] {
+  color: var(--marca);
+}
+
+.persona-fila__neto[data-signo='pago'] {
+  color: var(--aviso);
+}
+
+.persona-fila__neto--cero {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--texto-3);
+}
+
+.persona-fila__flecha {
+  color: var(--texto-3);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.bloque__cabeza--volver {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.bloque__cabeza-titulo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.persona--detalle {
+  border-top: 0;
+  padding-top: 4px;
+}
+
+.persona__herramientas {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+}
+
+.persona__herramientas-espaciador {
+  flex: 1;
+  min-width: 8px;
+}
+
 .persona {
   padding: 14px;
   border-top: 1px solid var(--borde);

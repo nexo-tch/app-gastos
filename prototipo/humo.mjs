@@ -129,20 +129,25 @@ comprobar('guarda solo mi parte aparte', ultimo.myShareCents === 3000000, String
 
 clic('.pestana[data-vista="personas"]');
 comprobar('la vista de personas lista a Ana', texto('#lienzo').includes('Ana'));
+comprobar('la lista de personas es compacta', doc.querySelector('.persona-fila') !== null);
 comprobar(
-  'te debe desglosado por categoría',
-  doc.querySelector('.persona__por-categoria') !== null,
+  'el desglose por categoría no está en la lista',
+  doc.querySelector('.persona__por-categoria') === null,
 );
-const tarjetaAna = [...doc.querySelectorAll('#lienzo .persona')].find((n) =>
-  n.querySelector('.persona__nombre')?.textContent.includes('Ana'),
-);
-comprobar(
-  'el monto que te deben no se repite en la tarjeta de Ana',
-  (tarjetaAna?.textContent.match(/Te debe/g) ?? []).length === 1,
-);
-comprobar('la tarjeta no muestra el correo en pantalla', !tarjetaAna?.textContent.includes('@'));
 
 const ana = guardado().personas.find((p) => p.name === 'Ana');
+clic(`[data-ver-persona="${ana.id}"]`);
+comprobar(
+  'te debe desglosado por categoría en el detalle',
+  doc.querySelector('.persona__por-categoria') !== null,
+);
+const detalleAna = doc.querySelector('#lienzo .persona--detalle');
+comprobar(
+  'el monto que te deben no se repite en el detalle de Ana',
+  (detalleAna?.textContent.match(/Te debe/g) ?? []).length === 1,
+);
+comprobar('el detalle no muestra el correo en pantalla', !detalleAna?.textContent.includes('@'));
+
 comprobar('Ana todavía no tiene correo', !ana?.email);
 clic(`[data-editar-correo-persona="${ana.id}"]`);
 comprobar('el diálogo de correo se abre', doc.querySelector('#dialogo-correo-persona').open === true);
@@ -154,10 +159,10 @@ comprobar(
   'se puede asociar correo a una persona existente',
   guardado().personas.find((p) => p.id === ana.id)?.email === 'ana@ejemplo.com',
 );
-const tarjetaAnaActualizada = [...doc.querySelectorAll('#lienzo .persona')].find((n) =>
-  n.querySelector('.persona__nombre')?.textContent.includes('Ana'),
+comprobar(
+  'el correo no queda visible en el detalle',
+  !doc.querySelector('#lienzo .persona--detalle')?.textContent.includes('@'),
 );
-comprobar('el correo no queda visible en la tarjeta', !tarjetaAnaActualizada?.textContent.includes('@'));
 
 /* ── 5c. Registrar manualmente lo que le debes ─────────────────── */
 
@@ -212,6 +217,7 @@ comprobar('el resumen lista lo que debes', texto('#lienzo').includes('Debes'));
 comprobar('el tablero muestra cuánto debes', texto('#tablero').includes('Yo debo'));
 
 clic('.pestana[data-vista="personas"]');
+clic(`[data-ver-persona="${ana.id}"]`);
 clic(`[data-deuda="${deudaHamburguesa.id}"]`);
 clic('#debo-eliminar');
 comprobar('se puede quitar una deuda manual', !guardado().deudas.some((d) => d.id === deudaHamburguesa.id));

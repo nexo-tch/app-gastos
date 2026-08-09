@@ -662,6 +662,7 @@
   let mes = M.monthKeyOf(new Date(), OFFSET);
   let vista = 'resumen';
   let agregandoPersona = false;
+  let personaDetalle = null;
   let correoPersonaEditando = null;
 
   /** Unico punto de escritura: aplica el cambio, persiste y redibuja. */
@@ -1391,6 +1392,8 @@
   /* ══ Vista: personas ═════════════════════════════════════════════ */
 
   function vistaPersonas() {
+    if (personaDetalle) return vistaPersonaDetalle(personaDetalle);
+
     const cuentas = porCobrar();
     const mias = porPagar();
 
@@ -1431,9 +1434,78 @@
                  Agrega a quien compartes gastos y podrás derivarle una parte al registrar.
                </div>`
             : `<div class="tarjeta">
-                 ${datos.personas.map((persona) => tarjetaPersona(persona, cuentas, mias)).join('')}
+                 ${datos.personas.map((persona) => filaPersonaResumen(persona, cuentas, mias)).join('')}
                </div>`
         }
+      </section>`;
+  }
+
+  function resumenLineaPersona(pendienteCobrar, pendientePagar) {
+    const partes = [];
+    if (pendienteCobrar > 0) partes.push(`Te debe ${plata(pendienteCobrar)}`);
+    if (pendientePagar > 0) partes.push(`Le debes ${plata(pendientePagar)}`);
+    return partes.length > 0 ? partes.join(' · ') : 'Al día';
+  }
+
+  function filaPersonaResumen(persona, cuentas, mias) {
+    const cuenta = cuentas.byPerson.find((p) => p.personId === persona.id);
+    const mio = mias.byPerson.find((p) => p.personId === persona.id);
+    const pendienteCobrar = cuenta?.pendingCents ?? 0;
+    const pendientePagar = mio?.pendingCents ?? 0;
+    const credito = cuenta?.creditCents ?? 0;
+    const neto = pendienteCobrar - pendientePagar - credito;
+
+    let montoDerecha = '';
+    let signoNeto = 'cero';
+    if (neto > 0) {
+      montoDerecha = plata(neto);
+      signoNeto = 'favor';
+    } else if (neto < 0) {
+      montoDerecha = plata(-neto);
+      signoNeto = 'pago';
+    }
+
+    return `
+      <button type="button" class="persona-fila" data-ver-persona="${persona.id}">
+        <span class="avatar">${escapar(iniciales(persona.name))}</span>
+        <span class="persona-fila__medio">
+          <span class="persona-fila__nombre">${escapar(persona.name)}</span>
+          <span class="persona-fila__resumen">${resumenLineaPersona(pendienteCobrar, pendientePagar)}</span>
+        </span>
+        ${
+          montoDerecha
+            ? `<span class="persona-fila__neto cifra" data-signo="${signoNeto}">${montoDerecha}</span>`
+            : `<span class="persona-fila__neto persona-fila__neto--cero">Al día</span>`
+        }
+        <span class="persona-fila__flecha" aria-hidden="true">›</span>
+      </button>`;
+  }
+
+  function vistaPersonaDetalle(idPersona) {
+    const persona = personaPorId(idPersona);
+    if (!persona) {
+      personaDetalle = null;
+      return vistaPersonas();
+    }
+
+    const cuentas = porCobrar();
+    const mias = porPagar();
+    const cuenta = cuentas.byPerson.find((p) => p.personId === persona.id);
+    const mio = mias.byPerson.find((p) => p.personId === persona.id);
+    const pendienteCobrar = cuenta?.pendingCents ?? 0;
+    const pendientePagar = mio?.pendingCents ?? 0;
+    const rotulo = resumenLineaPersona(pendienteCobrar, pendientePagar);
+
+    return `
+      <section class="bloque">
+        <div class="bloque__cabeza bloque__cabeza--volver">
+          <button type="button" class="boton boton--fantasma boton--chico" data-volver-personas>‹ Personas</button>
+          <div class="bloque__cabeza-titulo">
+            <h2>${escapar(persona.name)}</h2>
+            <span class="rotulo">${rotulo}</span>
+          </div>
+        </div>
+        ${detallePersona(persona, cuentas, mias)}
       </section>`;
   }
 
@@ -1474,7 +1546,7 @@
       </div>`;
   }
 
-  function tarjetaPersona(persona, cuentas, mias) {
+  function detallePersona(persona, cuentas, mias) {
     const cuenta = cuentas.byPerson.find((p) => p.personId === persona.id);
     const mio = mias.byPerson.find((p) => p.personId === persona.id);
 
@@ -1508,12 +1580,6 @@
       categoriaDeDeuda,
       (deuda) => deuda.amountCents,
     );
-
-    // Los montos viven en cada bloque; aquí solo decimos si está al día.
-    const saldos = [];
-    if (!hayBloqueCobrar && !hayBloquePagar) {
-      saldos.push({ signo: 'cero', texto: 'Al día' });
-    }
 
     const bloqueCobrar = hayBloqueCobrar
         ? `<div class="persona__bloque persona__bloque--cobrar">
@@ -1558,54 +1624,45 @@
         : '';
 
     return `
-      <div class="persona">
-        <div class="persona__cabeza">
-          <span class="avatar">${escapar(iniciales(persona.name))}</span>
-          <div class="persona__identidad">
-            <div class="persona__nombre-fila">
-              <span class="persona__nombre">${escapar(persona.name)}</span>
-              <button type="button" class="icono icono--mini" data-editar-correo-persona="${persona.id}"
-                      aria-label="${persona.email ? `Cambiar correo de ${escapar(persona.name)}` : `Asociar correo de ${escapar(persona.name)}`}">
-                ✎
-              </button>
-            </div>
-            ${
-              usada
-                ? `<button type="button" class="icono icono--mini" data-compartir-cuenta="${persona.id}"
-                           aria-label="Compartir cuenta con ${escapar(persona.name)}">
-                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
-                          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                       <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" />
-                       <polyline points="16 6 12 2 8 6" />
-                       <line x1="12" y1="2" x2="12" y2="15" />
-                     </svg>
-                   </button>`
-                : ''
-            }
-          </div>
-          ${saldos
-            .map((s) => `<span class="persona__saldo" data-signo="${s.signo}">${s.texto}</span>`)
-            .join('')}
-          <div class="persona__acciones">
-            ${
-              pendienteCobrar > 0
-                ? `<button type="button" class="boton boton--marco boton--chico" data-abonar="${persona.id}">
-                     Registrar abono
-                   </button>`
-                : ''
-            }
-            <button type="button" class="boton boton--marco boton--chico" data-debo-persona="${persona.id}">
-              Registrar deuda
-            </button>
-          </div>
+      <div class="persona persona--detalle">
+        <div class="persona__herramientas">
+          <button type="button" class="icono icono--mini" data-editar-correo-persona="${persona.id}"
+                  aria-label="${persona.email ? `Cambiar correo de ${escapar(persona.name)}` : `Asociar correo de ${escapar(persona.name)}`}">
+            ✎
+          </button>
+          ${
+            usada
+              ? `<button type="button" class="icono icono--mini" data-compartir-cuenta="${persona.id}"
+                         aria-label="Compartir cuenta con ${escapar(persona.name)}">
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                     <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" />
+                     <polyline points="16 6 12 2 8 6" />
+                     <line x1="12" y1="2" x2="12" y2="15" />
+                   </svg>
+                 </button>`
+              : ''
+          }
+          <span class="persona__herramientas-espaciador"></span>
+          ${
+            pendienteCobrar > 0
+              ? `<button type="button" class="boton boton--marco boton--chico" data-abonar="${persona.id}">
+                   Registrar abono
+                 </button>`
+              : ''
+          }
+          <button type="button" class="boton boton--marco boton--chico" data-debo-persona="${persona.id}">
+            Registrar deuda
+          </button>
           ${
             usada
               ? ''
-              : `<button type="button" class="icono" data-borrar-persona="${persona.id}" aria-label="Quitar a ${escapar(persona.name)}">✕</button>`
+              : `<button type="button" class="icono icono--mini" data-borrar-persona="${persona.id}"
+                         aria-label="Quitar a ${escapar(persona.name)}">✕</button>`
           }
         </div>
 
-        ${bloqueCobrar || bloquePagar ? `<div class="persona__cuerpo">${bloqueCobrar}${bloquePagar}</div>` : ''}
+        ${bloqueCobrar || bloquePagar ? `<div class="persona__cuerpo">${bloqueCobrar}${bloquePagar}</div>` : `<p class="persona__bloque-vacio">Sin movimientos con ${escapar(persona.name)}.</p>`}
       </div>`;
   }
 
@@ -2740,6 +2797,7 @@
     // Los identificadores salen del enlace, así que abrirlo dos veces reescribe
     // las mismas dos filas en vez de duplicar el gasto y la deuda.
     const idDeuda = idCompartidoDeCarga(carga) ?? id();
+    let personaAceptadaId = null;
 
     // Que se vea dónde quedó: es la pantalla que ahora dice que le debes.
     vista = 'personas';
@@ -2772,8 +2830,11 @@
         categoryId: categoriaRecibido,
         gastoDescription: `Compartido por ${persona.name}`,
       });
+      personaAceptadaId = persona.id;
     });
 
+    personaDetalle = personaAceptadaId;
+    pintar();
     recibido = null;
     olvidarEnlace();
     dialogoRecibido.close();
@@ -3258,6 +3319,7 @@
     if (pestana) {
       if (pestana.dataset.vista !== 'personas') {
         agregandoPersona = false;
+        personaDetalle = null;
         correoPersonaEditando = null;
         dialogoCorreoPersona.close();
       }
@@ -3270,6 +3332,7 @@
     if (ir) {
       if (ir.dataset.ir !== 'personas') {
         agregandoPersona = false;
+        personaDetalle = null;
         correoPersonaEditando = null;
         dialogoCorreoPersona.close();
       }
@@ -3287,6 +3350,19 @@
 
     if (objetivo.closest('[data-cancelar-nueva-persona]')) {
       agregandoPersona = false;
+      pintar();
+      return;
+    }
+
+    const verPersona = objetivo.closest('[data-ver-persona]');
+    if (verPersona) {
+      personaDetalle = verPersona.dataset.verPersona;
+      pintar();
+      return;
+    }
+
+    if (objetivo.closest('[data-volver-personas]')) {
+      personaDetalle = null;
       pintar();
       return;
     }
