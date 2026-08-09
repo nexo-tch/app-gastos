@@ -289,6 +289,64 @@
       </div>
     </dialog>
 
+    <!-- Registrar manualmente algo que le debes a alguien -->
+    <dialog class="hoja hoja--angosta" id="dialogo-debo" aria-labelledby="titulo-debo">
+      <form method="dialog" class="hoja__forma" id="forma-debo">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-debo">Registrar que le debo</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="hoja__cuerpo">
+          <p class="pista">
+            Cuando alguien pagó por ti y no usa la app, anótalo aquí. Entra en tu presupuesto
+            y queda apuntado que se lo debes.
+          </p>
+
+          <label class="campo">
+            <span class="campo__etiqueta">A quién</span>
+            <select class="entrada" id="debo-persona" required></select>
+          </label>
+
+          <label class="campo">
+            <span class="campo__etiqueta">Qué fue</span>
+            <input class="entrada" id="debo-descripcion" placeholder="Hamburguesa, taxi…" maxlength="60" required />
+          </label>
+
+          <label class="campo campo--monto">
+            <span class="campo__etiqueta">Cuánto le debes</span>
+            <div class="monto">
+              <span class="monto__signo" aria-hidden="true">$</span>
+              <input
+                class="monto__entrada"
+                id="debo-monto"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="0"
+                required
+              />
+            </div>
+          </label>
+
+          <label class="campo">
+            <span class="campo__etiqueta">Cuándo</span>
+            <input class="entrada" id="debo-fecha" type="date" required />
+          </label>
+
+          <fieldset class="campo">
+            <legend class="campo__etiqueta">En qué lo cuentas</legend>
+            <div class="rejilla-categorias" id="debo-categorias"></div>
+          </fieldset>
+        </div>
+
+        <div class="hoja__pie">
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Cancelar</button>
+          <button type="submit" class="boton boton--solido">Registrar</button>
+        </div>
+      </form>
+    </dialog>
+
     <!-- Crear o editar un gasto fijo -->
     <dialog class="hoja hoja--angosta" id="dialogo-fijo" aria-labelledby="titulo-fijo">
       <form method="dialog" class="hoja__forma" id="forma-fijo">

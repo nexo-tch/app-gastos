@@ -480,6 +480,7 @@
   let datos = completar(almacen.inicial() ?? vacio());
   let mes = M.monthKeyOf(new Date(), OFFSET);
   let vista = 'resumen';
+  let agregandoPersona = false;
 
   /** Unico punto de escritura: aplica el cambio, persiste y redibuja. */
   function mutar(cambio) {
@@ -605,6 +606,7 @@
   function pintarTablero(resumen) {
     const caja = document.getElementById('tablero-caja');
     const esMesActual = mes === M.monthKeyOf(new Date(), OFFSET);
+    const debo = porPagar();
 
     // El estado tiñe la tarjeta entera: verde mientras todo va bien, ámbar
     // cuando aprieta y rojo cuando ya no alcanza. Es la señal que se lee de
@@ -697,6 +699,11 @@
               ? `<span class="barra__clave">De otros <b>${plata(resumen.othersShareCents)}</b></span>`
               : ''
           }
+          ${
+            debo.totalPendingCents > 0
+              ? `<span class="barra__clave barra__clave--debo">Yo debo <b>${plata(debo.totalPendingCents)}</b></span>`
+              : ''
+          }
         </div>
       </div>
       ${noCaben}
@@ -709,6 +716,7 @@
 
   function vistaResumen(resumen) {
     const cuentas = porCobrar();
+    const mias = porPagar();
     const recientes = gastosDelMes(mes).slice(0, 8);
 
     return `
@@ -717,6 +725,7 @@
         ${bloqueRecientes(recientes)}
         <div style="display:flex;flex-direction:column;gap:28px">
           ${bloqueDeudasCorto(cuentas)}
+          ${bloqueDeboCorto(mias)}
           ${bloqueDonde()}
         </div>
       </div>
@@ -889,6 +898,38 @@
                    .join('')}
                </div>
                <p class="pista">Total pendiente <b class="cifra">${plata(cuentas.totalPendingCents)}</b></p>`
+        }
+      </section>`;
+  }
+
+  function bloqueDeboCorto(mias) {
+    const conSaldo = mias.byPerson.filter((p) => p.pendingCents > 0);
+
+    return `
+      <section class="bloque">
+        <div class="bloque__cabeza">
+          <h2>Debes</h2>
+          <button type="button" class="boton boton--fantasma boton--chico" data-ir="personas">Ver detalle</button>
+        </div>
+        ${
+          conSaldo.length === 0
+            ? sinNada('No le debes nada a nadie. Vas al día.')
+            : `<div class="tarjeta">
+                 ${conSaldo
+                   .map((p) => {
+                     const persona = personaPorId(p.personId);
+                     return `
+                       <div class="persona">
+                         <div class="persona__cabeza">
+                           <span class="avatar">${escapar(iniciales(persona?.name ?? '?'))}</span>
+                           <span class="persona__nombre">${escapar(persona?.name ?? 'Alguien')}</span>
+                           <span class="persona__saldo" data-signo="pago">${plata(p.pendingCents)}</span>
+                         </div>
+                       </div>`;
+                   })
+                   .join('')}
+               </div>
+               <p class="pista">Total pendiente <b class="cifra">${plata(mias.totalPendingCents)}</b></p>`
         }
       </section>`;
   }
@@ -1186,11 +1227,20 @@
           <span class="rotulo">${rotulo}</span>
         </div>
 
-        <form class="linea-alta" data-nueva-persona>
-          <input class="entrada" name="nombre" placeholder="Nombre de la persona" style="max-width:220px" required />
-          <input class="entrada" name="correo" type="email" placeholder="Correo de su cuenta (opcional)" style="max-width:240px" />
-          <button type="submit" class="boton boton--marco">Agregar persona</button>
-        </form>
+        <div class="personas-alta">
+          <button type="button" class="boton boton--marco" data-mostrar-nueva-persona ${agregandoPersona ? 'hidden' : ''}>
+            Agregar persona
+          </button>
+          <button type="button" class="boton boton--marco" data-abrir-debo ${agregandoPersona ? 'hidden' : ''}>
+            Registrar que le debo
+          </button>
+          <form class="linea-alta" data-nueva-persona ${agregandoPersona ? '' : 'hidden'}>
+            <input class="entrada" name="nombre" placeholder="Nombre de la persona" style="max-width:220px" required />
+            <input class="entrada" name="correo" type="email" placeholder="Correo de su cuenta (opcional)" style="max-width:240px" />
+            <button type="submit" class="boton boton--solido">Agregar</button>
+            <button type="button" class="boton boton--fantasma" data-cancelar-nueva-persona>Cancelar</button>
+          </form>
+        </div>
 
         ${
           datos.personas.length === 0
@@ -1289,12 +1339,22 @@
                  </button>`
               : ''
           }
+          <button type="button" class="boton boton--fantasma boton--chico" data-debo-persona="${persona.id}">
+            Le debo algo
+          </button>
           ${
             usada
               ? ''
               : `<button type="button" class="icono" data-borrar-persona="${persona.id}" aria-label="Quitar a ${escapar(persona.name)}">✕</button>`
           }
         </div>
+
+        <form class="persona__correo linea-alta" data-correo-persona="${persona.id}">
+          <input class="entrada" name="correo" type="email" inputmode="email" autocomplete="email"
+                 value="${persona.email ? escapar(persona.email) : ''}"
+                 placeholder="Correo de su cuenta (opcional)" />
+          <button type="submit" class="boton boton--fantasma boton--chico">Guardar</button>
+        </form>
 
         ${bloqueCobrar || bloquePagar ? `<div class="persona__cuerpo">${bloqueCobrar}${bloquePagar}</div>` : ''}
       </div>`;
@@ -1967,6 +2027,59 @@
       .join('');
   }
 
+  /** Gasto + deuda cuando alguien pagó por ti: compartido o anotado a mano. */
+  const SUFIJO_GASTO_DEUDA = '-gasto';
+
+  function idDeudaLigada(idGasto) {
+    return idGasto.endsWith(SUFIJO_GASTO_DEUDA)
+      ? idGasto.slice(0, -SUFIJO_GASTO_DEUDA.length)
+      : null;
+  }
+
+  function registrarDeudaConGasto(
+    d,
+    { idDeuda, personId, personName, description, amountCents, day, categoryId, gastoDescription },
+  ) {
+    const idGasto = `${idDeuda}${SUFIJO_GASTO_DEUDA}`;
+    const etiqueta = description.trim() || 'Un gasto';
+
+    const gasto = {
+      id: idGasto,
+      accountId: null,
+      categoryId,
+      status: 'confirmed',
+      source: 'manual',
+      amountTotalCents: amountCents,
+      myShareCents: amountCents,
+      currency: 'COP',
+      merchantRaw: etiqueta,
+      merchantNormalized: etiqueta.toUpperCase(),
+      description: gastoDescription ?? `Le debo a ${personName}: ${etiqueta}`,
+      occurredAt: isoDeDia(day),
+      confirmedAt: ahora(),
+      createdAt: ahora(),
+      updatedAt: ahora(),
+      deletedAt: null,
+    };
+
+    const deuda = {
+      id: idDeuda,
+      personId,
+      amountCents,
+      description: etiqueta,
+      occurredAt: isoDeDia(day),
+      settledAt: null,
+    };
+
+    const yaEstaba = d.gastos.findIndex((g) => g.id === idGasto);
+    if (yaEstaba >= 0) d.gastos[yaEstaba] = gasto;
+    else d.gastos.push(gasto);
+
+    const previa = d.deudas.findIndex((x) => x.id === idDeuda);
+    if (previa >= 0) d.deudas[previa] = deuda;
+    else d.deudas.push(deuda);
+  }
+
   function aceptarRecibido() {
     const carga = recibido;
     if (!carga) return;
@@ -1976,7 +2089,6 @@
     // Los identificadores salen del enlace, así que abrirlo dos veces reescribe
     // las mismas dos filas en vez de duplicar el gasto y la deuda.
     const idDeuda = carga.i ? `compartido-${carga.i}` : id();
-    const idGasto = `${idDeuda}-gasto`;
 
     // Que se vea dónde quedó: es la pantalla que ahora dice que le debes.
     vista = 'personas';
@@ -1999,49 +2111,108 @@
         d.personas.push(persona);
       }
 
-      const gasto = {
-        id: idGasto,
-        accountId: null,
-        categoryId: categoriaRecibido,
-        status: 'confirmed',
-        source: 'manual',
-        // Es mi parte y nada más: del gasto completo de otra persona no me
-        // toca opinar, y sumarlo entero me inflaría el presupuesto.
-        amountTotalCents: carga.c,
-        myShareCents: carga.c,
-        currency: 'COP',
-        merchantRaw: carga.q || null,
-        merchantNormalized: carga.q ? carga.q.toUpperCase() : null,
-        description: `Compartido por ${persona.name}`,
-        occurredAt: isoDeDia(carga.d),
-        confirmedAt: ahora(),
-        createdAt: ahora(),
-        updatedAt: ahora(),
-        deletedAt: null,
-      };
-
-      const deuda = {
-        id: idDeuda,
+      registrarDeudaConGasto(d, {
+        idDeuda,
         personId: persona.id,
+        personName: persona.name,
+        description: carga.q || '',
         amountCents: carga.c,
-        description: carga.q || null,
-        occurredAt: isoDeDia(carga.d),
-        settledAt: null,
-      };
-
-      const yaEstaba = d.gastos.findIndex((g) => g.id === idGasto);
-      if (yaEstaba >= 0) d.gastos[yaEstaba] = gasto;
-      else d.gastos.push(gasto);
-
-      const previa = d.deudas.findIndex((x) => x.id === idDeuda);
-      if (previa >= 0) d.deudas[previa] = deuda;
-      else d.deudas.push(deuda);
+        day: carga.d,
+        categoryId: categoriaRecibido,
+        gastoDescription: `Compartido por ${persona.name}`,
+      });
     });
 
     recibido = null;
     olvidarEnlace();
     dialogoRecibido.close();
     avisar(`Listo: le debes ${plata(carga.c)} a ${nombre}`);
+  }
+
+  /* ══ Registrar manualmente lo que le debes ═══════════════════════ */
+
+  const dialogoDebo = document.getElementById('dialogo-debo');
+  let categoriaDebo = null;
+
+  function abrirDebo(idPersona) {
+    if (datos.personas.length === 0) {
+      avisar('Agrega primero a la persona');
+      agregandoPersona = true;
+      vista = 'personas';
+      pintar();
+      return;
+    }
+
+    categoriaDebo = categoriasActivas()[0]?.id ?? null;
+    document.getElementById('debo-persona').innerHTML = datos.personas
+      .map(
+        (p) =>
+          `<option value="${escapar(p.id)}" ${p.id === idPersona ? 'selected' : ''}>${escapar(p.name)}</option>`,
+      )
+      .join('');
+    document.getElementById('debo-descripcion').value = '';
+    document.getElementById('debo-monto').value = '';
+    document.getElementById('debo-fecha').value = hoyDia();
+    pintarCategoriasDebo();
+    dialogoDebo.showModal();
+    setTimeout(() => document.getElementById('debo-descripcion').focus(), 40);
+  }
+
+  function pintarCategoriasDebo() {
+    document.getElementById('debo-categorias').innerHTML = categoriasActivas()
+      .map(
+        (c) => `
+        <button type="button" class="ficha-categoria" data-categoria-debo="${c.id}"
+                aria-pressed="${c.id === categoriaDebo}">
+          <i class="categoria__mecha" style="background:${c.color}"></i>
+          <span>${escapar(c.name)}</span>
+        </button>`,
+      )
+      .join('');
+  }
+
+  function guardarDebo() {
+    const personId = document.getElementById('debo-persona').value;
+    const persona = personaPorId(personId);
+    const description = document.getElementById('debo-descripcion').value.trim();
+    const amountCents = centavosDesdeTexto(document.getElementById('debo-monto').value);
+    const day = document.getElementById('debo-fecha').value || hoyDia();
+
+    if (!persona) {
+      avisar('Elige a quién le debes');
+      return false;
+    }
+    if (!description) {
+      avisar('Di qué fue');
+      return false;
+    }
+    if (amountCents <= 0) {
+      avisar('Ponle un monto');
+      return false;
+    }
+    if (!categoriaDebo) {
+      avisar('Elige en qué categoría lo cuentas');
+      return false;
+    }
+
+    const idDeuda = id();
+    vista = 'personas';
+
+    mutar((d) => {
+      registrarDeudaConGasto(d, {
+        idDeuda,
+        personId: persona.id,
+        personName: persona.name,
+        description,
+        amountCents,
+        day,
+        categoryId: categoriaDebo,
+      });
+    });
+
+    dialogoDebo.close();
+    avisar(`Listo: le debes ${plata(amountCents)} a ${persona.name}`);
+    return true;
   }
 
   /* ══ Acciones sobre los datos ════════════════════════════════════ */
@@ -2137,6 +2308,10 @@
       if (instancia) {
         instancia.status = 'planned';
         instancia.expenseId = null;
+      }
+      const idDeuda = idDeudaLigada(idGasto);
+      if (idDeuda) {
+        d.deudas = d.deudas.filter((deuda) => deuda.id !== idDeuda);
       }
     });
     avisar('Gasto eliminado');
@@ -2328,6 +2503,7 @@
 
     const pestana = objetivo.closest('.pestana');
     if (pestana) {
+      if (pestana.dataset.vista !== 'personas') agregandoPersona = false;
       vista = pestana.dataset.vista;
       pintar();
       return;
@@ -2335,7 +2511,21 @@
 
     const ir = objetivo.closest('[data-ir]');
     if (ir) {
+      if (ir.dataset.ir !== 'personas') agregandoPersona = false;
       vista = ir.dataset.ir;
+      pintar();
+      return;
+    }
+
+    if (objetivo.closest('[data-mostrar-nueva-persona]')) {
+      agregandoPersona = true;
+      pintar();
+      setTimeout(() => document.querySelector('[data-nueva-persona] [name="nombre"]')?.focus(), 40);
+      return;
+    }
+
+    if (objetivo.closest('[data-cancelar-nueva-persona]')) {
+      agregandoPersona = false;
       pintar();
       return;
     }
@@ -2459,6 +2649,24 @@
       recibido = null;
       olvidarEnlace();
       dialogoRecibido.close();
+      return;
+    }
+
+    if (objetivo.closest('[data-abrir-debo]')) {
+      abrirDebo(null);
+      return;
+    }
+
+    const deboPersona = objetivo.closest('[data-debo-persona]');
+    if (deboPersona) {
+      abrirDebo(deboPersona.dataset.deboPersona);
+      return;
+    }
+
+    const categoriaDeboBtn = objetivo.closest('[data-categoria-debo]');
+    if (categoriaDeboBtn) {
+      categoriaDebo = categoriaDeboBtn.dataset.categoriaDebo;
+      pintarCategoriasDebo();
       return;
     }
 
@@ -2790,13 +2998,33 @@
     avisar(editando ? 'Fijo actualizado' : 'Fijo creado');
   });
 
+  document.getElementById('forma-debo').addEventListener('submit', (evento) => {
+    evento.preventDefault();
+    guardarDebo();
+  });
+
   document.addEventListener('submit', (evento) => {
+    const formaCorreo = evento.target.closest('[data-correo-persona]');
+    if (formaCorreo) {
+      evento.preventDefault();
+      const idPersona = formaCorreo.dataset.correoPersona;
+      const correo = formaCorreo.elements.correo.value.trim();
+      mutar((d) => {
+        const persona = d.personas.find((p) => p.id === idPersona);
+        if (!persona) return;
+        persona.email = correo ? normalizarCorreo(correo) : null;
+      });
+      avisar(correo ? 'Correo guardado' : 'Correo quitado');
+      return;
+    }
+
     const forma = evento.target.closest('[data-nueva-persona]');
     if (!forma) return;
     evento.preventDefault();
     const nombre = forma.elements.nombre.value.trim();
     const correo = forma.elements.correo.value.trim();
     if (!nombre) return;
+    agregandoPersona = false;
     mutar((d) => {
       d.personas.push({
         id: id(),

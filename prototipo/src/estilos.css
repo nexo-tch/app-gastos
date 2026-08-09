@@ -544,6 +544,10 @@ button {
   color: var(--tablero-texto);
 }
 
+.barra__clave--debo b {
+  color: var(--aviso);
+}
+
 /* ── Pestanas ───────────────────────────────────────────────────── */
 
 .pestanas {
@@ -939,6 +943,16 @@ button {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.persona__correo {
+  margin-top: 8px;
+}
+
+.persona__correo .entrada {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
 }
 
 .persona__bloque {

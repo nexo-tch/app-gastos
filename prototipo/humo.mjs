@@ -127,6 +127,43 @@ comprobar('guarda solo mi parte aparte', ultimo.myShareCents === 3000000, String
 clic('.pestana[data-vista="personas"]');
 comprobar('la vista de personas lista a Ana', texto('#lienzo').includes('Ana'));
 
+const ana = guardado().personas.find((p) => p.name === 'Ana');
+comprobar('Ana todavía no tiene correo', !ana?.email);
+doc.querySelector(`[data-correo-persona="${ana.id}"] [name="correo"]`).value = 'ana@ejemplo.com';
+doc.querySelector(`[data-correo-persona="${ana.id}"]`).dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+comprobar(
+  'se puede asociar correo a una persona existente',
+  guardado().personas.find((p) => p.id === ana.id)?.email === 'ana@ejemplo.com',
+);
+
+/* ── 5c. Registrar manualmente lo que le debes ─────────────────── */
+
+clic(`[data-debo-persona="${ana.id}"]`);
+comprobar('el diálogo de deuda manual se abre', doc.querySelector('#dialogo-debo').open === true);
+
+doc.getElementById('debo-descripcion').value = 'Hamburguesa';
+escribir('#debo-monto', '25000');
+doc.querySelector('#forma-debo').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+
+comprobar(
+  'queda apuntado lo que le debes',
+  guardado().deudas.some((d) => d.description === 'Hamburguesa' && d.amountCents === 2500000),
+);
+comprobar(
+  'entra en tus gastos del mes',
+  guardado().gastos.some((g) => g.merchantRaw === 'Hamburguesa' && g.myShareCents === 2500000),
+);
+
+clic('.pestana[data-vista="resumen"]');
+comprobar('el resumen lista lo que debes', texto('#lienzo').includes('Debes'));
+comprobar('el tablero muestra cuánto debes', texto('#tablero').includes('Yo debo'));
+
+clic('.pestana[data-vista="personas"]');
+
 clic('[data-abonar]');
 comprobar('el diálogo de abono se abre', doc.querySelector('#dialogo-abono').open === true);
 
@@ -479,6 +516,15 @@ async function revisarRecibido(enlace, delQueComparte) {
     `${suyo().gastos.length} gastos, ${suyo().deudas.length} deudas`,
   );
 
+  const idGastoCompartido = suyo().gastos[0].id;
+  suClic('.pestana[data-vista="gastos"]');
+  suClic(`[data-gasto="${idGastoCompartido}"]`);
+  suClic('#gasto-eliminar');
+  comprobar('borrar el gasto compartido quita la deuda ligada', suyo().deudas.length === 0);
+  comprobar('el gasto queda eliminado', suyo().gastos[0].deletedAt !== null);
+  suClic('.pestana[data-vista="personas"]');
+  comprobar('Personas deja de decir Le debes', !suTexto('#lienzo').includes('Le debes'));
+
   ventana.close();
 
   // Si ya tenías a esa persona con otro nombre pero su correo de cuenta, no duplica.
@@ -618,6 +664,7 @@ async function revisarSincronizacion() {
   await new Promise((listo) => setTimeout(listo, 0));
 
   clicSync('.pestana[data-vista="personas"]');
+  clicSync('[data-mostrar-nueva-persona]');
   doc.querySelector('[data-nueva-persona] [name="nombre"]').value = 'Julie';
   doc.querySelector('[data-nueva-persona]').dispatchEvent(
     new ventana.Event('submit', { bubbles: true, cancelable: true }),
