@@ -2393,6 +2393,16 @@
 
   const dialogoCuenta = document.getElementById('dialogo-cuenta');
   let cuentaRecibida = null;
+  /** Vista de #cuenta= abierta sin sesión: al cerrar, mandar a entrar. */
+  let vistaCuentaPublica = false;
+
+  dialogoCuenta.addEventListener('close', () => {
+    const irEntrar = vistaCuentaPublica;
+    vistaCuentaPublica = false;
+    cuentaRecibida = null;
+    olvidarEnlace();
+    if (irEntrar) location.href = '/entrar';
+  });
 
   function leerEnlaceCuenta() {
     const marca = location.hash.match(new RegExp(`^#${MARCA_CUENTA}=(.+)$`));
@@ -2455,6 +2465,7 @@
 
   function abrirCuentaRecibida(carga) {
     cuentaRecibida = carga;
+    vistaCuentaPublica = almacen.conCuenta && !almacen.sesionActiva();
     const quien = carga.de || 'Alguien';
 
     document.getElementById('titulo-cuenta').textContent = `${quien} te compartió la cuenta`;
@@ -3362,8 +3373,6 @@
     }
 
     if (objetivo.closest('#cuenta-cerrar')) {
-      cuentaRecibida = null;
-      olvidarEnlace();
       dialogoCuenta.close();
       return;
     }
