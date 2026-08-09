@@ -126,6 +126,13 @@ comprobar('guarda solo mi parte aparte', ultimo.myShareCents === 3000000, String
 
 clic('.pestana[data-vista="personas"]');
 comprobar('la vista de personas lista a Ana', texto('#lienzo').includes('Ana'));
+const tarjetaAna = [...doc.querySelectorAll('#lienzo .persona')].find((n) =>
+  n.querySelector('.persona__nombre')?.textContent.includes('Ana'),
+);
+comprobar(
+  'el monto que te deben no se repite en la tarjeta de Ana',
+  (tarjetaAna?.textContent.match(/Te debe/g) ?? []).length === 1,
+);
 
 const ana = guardado().personas.find((p) => p.name === 'Ana');
 comprobar('Ana todavía no tiene correo', !ana?.email);

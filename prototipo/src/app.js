@@ -1277,14 +1277,23 @@
       datos.repartos.some((r) => r.personId === persona.id) ||
       datos.deudas.some((d) => d.personId === persona.id);
 
-    const saldos = [];
-    if (netoCobrar > 0) saldos.push({ signo: 'debe', texto: `Te debe ${plata(netoCobrar)}` });
-    else if (netoCobrar < 0) saldos.push({ signo: 'favor', texto: `${plata(-netoCobrar)} a favor` });
-    if (pendientePagar > 0) saldos.push({ signo: 'pago', texto: `Le debes ${plata(pendientePagar)}` });
-    if (saldos.length === 0) saldos.push({ signo: 'cero', texto: 'Al día' });
+    const hayBloqueCobrar =
+      pendienteCobrar > 0 || itemsCobrar.length > 0 || (cuenta?.creditCents ?? 0) > 0;
+    const hayBloquePagar = pendientePagar > 0 || itemsPagar.length > 0;
 
-    const bloqueCobrar =
-      pendienteCobrar > 0 || itemsCobrar.length > 0 || (cuenta?.creditCents ?? 0) > 0
+    const saldos = [];
+    if (!hayBloqueCobrar) {
+      if (netoCobrar > 0) saldos.push({ signo: 'debe', texto: `Te debe ${plata(netoCobrar)}` });
+      else if (netoCobrar < 0) saldos.push({ signo: 'favor', texto: `${plata(-netoCobrar)} a favor` });
+    }
+    if (!hayBloquePagar && pendientePagar > 0) {
+      saldos.push({ signo: 'pago', texto: `Le debes ${plata(pendientePagar)}` });
+    }
+    if (saldos.length === 0 && !hayBloqueCobrar && !hayBloquePagar) {
+      saldos.push({ signo: 'cero', texto: 'Al día' });
+    }
+
+    const bloqueCobrar = hayBloqueCobrar
         ? `<div class="persona__bloque persona__bloque--cobrar">
              <div class="persona__bloque-cabeza">
                <span class="persona__bloque-titulo">Te debe</span>
@@ -1308,8 +1317,7 @@
            </div>`
         : '';
 
-    const bloquePagar =
-      pendientePagar > 0 || itemsPagar.length > 0
+    const bloquePagar = hayBloquePagar
         ? `<div class="persona__bloque persona__bloque--pagar">
              <div class="persona__bloque-cabeza">
                <span class="persona__bloque-titulo">Le debes</span>
@@ -1326,33 +1334,22 @@
         : '';
 
     const editandoCorreo = editandoCorreoPersona === persona.id;
-    const bloqueCorreo = editandoCorreo
-      ? `<form class="persona__correo persona__correo--editar linea-alta" data-correo-persona="${persona.id}">
-           <input class="entrada" name="correo" type="email" inputmode="email" autocomplete="email"
-                  value="${persona.email ? escapar(persona.email) : ''}"
-                  placeholder="Correo de su cuenta" />
-           <button type="submit" class="boton boton--solido boton--chico">Guardar</button>
-           <button type="button" class="boton boton--fantasma boton--chico" data-cancelar-correo-persona="${persona.id}">
-             Cancelar
-           </button>
-         </form>`
-      : `<div class="persona__correo">
-           ${
-             persona.email
-               ? `<span class="persona__correo-valor">${escapar(persona.email)}</span>`
-               : `<span class="persona__correo-vacio">Sin correo de cuenta</span>`
-           }
-           <button type="button" class="icono icono--mini" data-editar-correo-persona="${persona.id}"
-                   aria-label="${persona.email ? `Cambiar correo de ${escapar(persona.name)}` : `Asociar correo de ${escapar(persona.name)}`}">
-             ✎
-           </button>
-         </div>`;
 
     return `
       <div class="persona">
         <div class="persona__cabeza">
           <span class="avatar">${escapar(iniciales(persona.name))}</span>
-          <span class="persona__nombre">${escapar(persona.name)}</span>
+          <div class="persona__identidad">
+            <span class="persona__nombre">${escapar(persona.name)}</span>
+            ${
+              editandoCorreo
+                ? ''
+                : `<button type="button" class="icono icono--mini" data-editar-correo-persona="${persona.id}"
+                           aria-label="${persona.email ? `Cambiar correo de ${escapar(persona.name)}` : `Asociar correo de ${escapar(persona.name)}`}">
+                     ✎
+                   </button>`
+            }
+          </div>
           ${saldos
             .map((s) => `<span class="persona__saldo" data-signo="${s.signo}">${s.texto}</span>`)
             .join('')}
@@ -1371,7 +1368,19 @@
               ? ''
               : `<button type="button" class="icono" data-borrar-persona="${persona.id}" aria-label="Quitar a ${escapar(persona.name)}">✕</button>`
           }
-          ${bloqueCorreo}
+          ${
+            editandoCorreo
+              ? `<form class="persona__correo persona__correo--editar linea-alta" data-correo-persona="${persona.id}">
+                   <input class="entrada" name="correo" type="email" inputmode="email" autocomplete="email"
+                          value="${persona.email ? escapar(persona.email) : ''}"
+                          placeholder="Correo de su cuenta" />
+                   <button type="submit" class="boton boton--solido boton--chico">Guardar</button>
+                   <button type="button" class="boton boton--fantasma boton--chico" data-cancelar-correo-persona="${persona.id}">
+                     Cancelar
+                   </button>
+                 </form>`
+              : ''
+          }
         </div>
 
         ${bloqueCobrar || bloquePagar ? `<div class="persona__cuerpo">${bloqueCobrar}${bloquePagar}</div>` : ''}
