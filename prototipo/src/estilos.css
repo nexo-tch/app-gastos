@@ -1836,67 +1836,13 @@ select.entrada {
 
 /* ── Graficas ───────────────────────────────────────────────────── */
 
-.categorias-panel {
-  display: grid;
-  grid-template-columns: minmax(120px, 148px) minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-}
-
-.categorias-panel__detalle {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-}
-
-.categorias-panel__lista {
-  min-width: 0;
-}
-
-.dona {
-  position: relative;
-  width: 128px;
-  margin: 0 auto;
-}
-
-.dona__svg {
-  width: 128px;
-  height: 128px;
-  display: block;
-}
-
-.dona__centro {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  pointer-events: none;
-}
-
-.dona__total {
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.1;
-  text-align: center;
-}
-
-.dona__etiqueta {
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--texto-3);
-}
-
 .distribucion {
   display: flex;
   height: 10px;
   border-radius: 5px;
   overflow: hidden;
   background: var(--superficie-3);
+  margin-bottom: 4px;
 }
 
 .distribucion__trozo {
@@ -2106,10 +2052,6 @@ select.entrada {
   .tablero__contexto {
     text-align: left;
     padding-bottom: 0;
-  }
-
-  .categorias-panel {
-    grid-template-columns: 1fr;
   }
 
   .pareja {

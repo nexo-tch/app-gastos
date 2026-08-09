@@ -933,56 +933,6 @@
       ${pendientes}`;
   }
 
-  function arcoDonut(cx, cy, radioExt, radioInt, inicioGrados, barridoGrados, color) {
-    if (barridoGrados <= 0.05) return '';
-    const finGrados = inicioGrados + barridoGrados;
-    const a0 = (inicioGrados * Math.PI) / 180;
-    const a1 = (finGrados * Math.PI) / 180;
-    const x0o = cx + radioExt * Math.cos(a0);
-    const y0o = cy + radioExt * Math.sin(a0);
-    const x1o = cx + radioExt * Math.cos(a1);
-    const y1o = cy + radioExt * Math.sin(a1);
-    const x1i = cx + radioInt * Math.cos(a1);
-    const y1i = cy + radioInt * Math.sin(a1);
-    const x0i = cx + radioInt * Math.cos(a0);
-    const y0i = cy + radioInt * Math.sin(a0);
-    const grande = barridoGrados > 180 ? 1 : 0;
-    return `<path d="M ${x0o.toFixed(2)} ${y0o.toFixed(2)} A ${radioExt} ${radioExt} 0 ${grande} 1 ${x1o.toFixed(2)} ${y1o.toFixed(2)} L ${x1i.toFixed(2)} ${y1i.toFixed(2)} A ${radioInt} ${radioInt} 0 ${grande} 0 ${x0i.toFixed(2)} ${y0i.toFixed(2)} Z" fill="${color}" />`;
-  }
-
-  function graficaDonutCategorias(filas, totalGastado) {
-    if (totalGastado <= 0) return '';
-
-    const segmentos = filas.filter((c) => c.spentCents > 0);
-    if (segmentos.length === 0) return '';
-
-    const cx = 64;
-    const cy = 64;
-    const radioExt = 54;
-    const radioInt = 34;
-    let angulo = -90;
-
-    const arcos = segmentos
-      .map((c) => {
-        const barrido = (c.spentCents / totalGastado) * 360;
-        const arco = arcoDonut(cx, cy, radioExt, radioInt, angulo, barrido, colorCategoria(c.categoryId));
-        angulo += barrido;
-        return arco;
-      })
-      .join('');
-
-    return `
-      <div class="dona" aria-hidden="true">
-        <svg class="dona__svg" viewBox="0 0 128 128">
-          ${arcos}
-        </svg>
-        <div class="dona__centro">
-          <span class="dona__total cifra">${plata(totalGastado)}</span>
-          <span class="dona__etiqueta">gastado</span>
-        </div>
-      </div>`;
-  }
-
   function barraDistribucionCategorias(filas, totalGastado) {
     const segmentos = filas.filter((c) => c.spentCents > 0);
     if (segmentos.length === 0 || totalGastado <= 0) return '';
@@ -1045,8 +995,36 @@
     }
 
     const total = resumen.spentCents;
-    const grafica = graficaDonutCategorias(filas, total);
     const distribucion = barraDistribucionCategorias(filas, total);
+
+    const filasHtml = filas
+      .map((c) => {
+        const consumido = c.spentCents + c.committedCents;
+        const porcentaje = c.ratio !== null ? Math.min(c.ratio * 100, 100) : 0;
+        const parte = total > 0 ? Math.round((c.spentCents / total) * 100) : 0;
+        const nota = notaCategoria(c, parte);
+
+        return `
+          <div class="categoria">
+            <div class="categoria__nombre">
+              <i class="categoria__mecha" style="background:${colorCategoria(c.categoryId)}"></i>
+              <span>${escapar(nombreCategoria(c.categoryId))}</span>
+            </div>
+            <div class="categoria__cifra">
+              ${plata(consumido)}
+              ${c.limitCents !== null ? `<small> / ${plata(c.limitCents)}</small>` : ''}
+            </div>
+            ${
+              c.limitCents !== null
+                ? `<div class="medidor">
+                     <span class="medidor__relleno" data-estado="${c.state}" style="width:${porcentaje}%"></span>
+                   </div>`
+                : ''
+            }
+            <div class="categoria__nota" data-estado="${c.state}">${nota}</div>
+          </div>`;
+      })
+      .join('');
 
     return `
       <section class="bloque">
@@ -1054,75 +1032,8 @@
           <h2>En qué se te va</h2>
           <span class="rotulo">Solo tu parte</span>
         </div>
-        ${
-          grafica || distribucion
-            ? `<div class="categorias-panel">
-                 ${grafica}
-                 <div class="categorias-panel__detalle">
-                   ${distribucion}
-                   <div class="tarjeta categorias-panel__lista">
-                     ${filas
-                       .map((c) => {
-                         const consumido = c.spentCents + c.committedCents;
-                         const porcentaje = c.ratio !== null ? Math.min(c.ratio * 100, 100) : 0;
-                         const parte = total > 0 ? Math.round((c.spentCents / total) * 100) : 0;
-                         const nota = notaCategoria(c, parte);
-
-                         return `
-                           <div class="categoria">
-                             <div class="categoria__nombre">
-                               <i class="categoria__mecha" style="background:${colorCategoria(c.categoryId)}"></i>
-                               <span>${escapar(nombreCategoria(c.categoryId))}</span>
-                             </div>
-                             <div class="categoria__cifra">
-                               ${plata(consumido)}
-                               ${c.limitCents !== null ? `<small> / ${plata(c.limitCents)}</small>` : ''}
-                             </div>
-                             ${
-                               c.limitCents !== null
-                                 ? `<div class="medidor">
-                                      <span class="medidor__relleno" data-estado="${c.state}" style="width:${porcentaje}%"></span>
-                                    </div>`
-                                 : ''
-                             }
-                             <div class="categoria__nota" data-estado="${c.state}">${nota}</div>
-                           </div>`;
-                       })
-                       .join('')}
-                   </div>
-                 </div>
-               </div>`
-            : `<div class="tarjeta">
-                 ${filas
-                   .map((c) => {
-                     const consumido = c.spentCents + c.committedCents;
-                     const porcentaje = c.ratio !== null ? Math.min(c.ratio * 100, 100) : 0;
-                     const parte = total > 0 ? Math.round((c.spentCents / total) * 100) : 0;
-                     const nota = notaCategoria(c, parte);
-
-                     return `
-                       <div class="categoria">
-                         <div class="categoria__nombre">
-                           <i class="categoria__mecha" style="background:${colorCategoria(c.categoryId)}"></i>
-                           <span>${escapar(nombreCategoria(c.categoryId))}</span>
-                         </div>
-                         <div class="categoria__cifra">
-                           ${plata(consumido)}
-                           ${c.limitCents !== null ? `<small> / ${plata(c.limitCents)}</small>` : ''}
-                         </div>
-                         ${
-                           c.limitCents !== null
-                             ? `<div class="medidor">
-                                  <span class="medidor__relleno" data-estado="${c.state}" style="width:${porcentaje}%"></span>
-                                </div>`
-                             : ''
-                         }
-                         <div class="categoria__nota" data-estado="${c.state}">${nota}</div>
-                       </div>`;
-                   })
-                   .join('')}
-               </div>`
-        }
+        ${distribucion}
+        <div class="tarjeta">${filasHtml}</div>
       </section>`;
   }
 
@@ -1137,9 +1048,14 @@
     if (fila.limitCents !== null) {
       const base = `de ${plata(fila.limitCents)}`;
       const cola = reservado ? ` · incluye ${plata(fila.committedCents)} reservados` : '';
-      return fila.availableCents >= 0
-        ? `Te quedan ${plata(fila.availableCents)} ${base}${cola}`
-        : `Te pasaste ${plata(-fila.availableCents)} del tope ${base}${cola}`;
+      const saldo =
+        fila.availableCents >= 0
+          ? `Te quedan ${plata(fila.availableCents)} ${base}${cola}`
+          : `Te pasaste ${plata(-fila.availableCents)} del tope ${base}${cola}`;
+
+      if (fila.spentCents === 0 && reservado) return saldo;
+
+      return `${parte}% de tu gasto del mes · ${saldo}`;
     }
 
     if (fila.spentCents === 0 && reservado) {
@@ -1528,6 +1444,16 @@
               const fila = resumen.byCategory.find((c) => c.categoryId === categoria.id);
               const gastado = (fila?.spentCents ?? 0) + (fila?.committedCents ?? 0);
               const tope = presu.limites?.[categoria.id] ?? 0;
+              const parteMes =
+                resumen.spentCents > 0 && (fila?.spentCents ?? 0) > 0
+                  ? Math.round(((fila?.spentCents ?? 0) / resumen.spentCents) * 100)
+                  : null;
+              const detalleUsados = [
+                parteMes !== null ? `${parteMes}% del mes` : null,
+                `${plata(gastado)} usados`,
+              ]
+                .filter(Boolean)
+                .join(' · ');
 
               return `
                 <div class="categoria categoria--tope">
@@ -1538,7 +1464,7 @@
                             aria-label="Cambiar nombre o color de ${escapar(categoria.name)}">✎</button>
                   </div>
                   <div class="categoria__controles">
-                    <span class="categoria__usados">${plata(gastado)} usados</span>
+                    <span class="categoria__usados">${detalleUsados}</span>
                     <input class="entrada tope" inputmode="numeric" placeholder="sin tope"
                            aria-label="Tope de ${escapar(categoria.name)}"
                            data-tope="${categoria.id}" value="${textoDesdeCentavos(tope)}" />

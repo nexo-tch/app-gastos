@@ -86,7 +86,6 @@ comprobar('el tablero muestra lo que queda', texto('#tablero').includes('Te qued
 comprobar('el tablero en resumen es completo', doc.getElementById('tablero').dataset.modo === 'completo');
 comprobar('la barra marca el día de hoy', doc.querySelector('.barra__hoy') !== null);
 comprobar('aparece el desglose por categoría', texto('#lienzo').includes('En qué se te va'));
-comprobar('el resumen muestra gráfica de categorías', doc.querySelector('.dona') !== null);
 comprobar('el resumen muestra barra de distribución', doc.querySelector('.distribucion') !== null);
 comprobar('aparece historial por categoría', texto('#lienzo').includes('Historial por categoría'));
 comprobar('ofrece rangos de meses en el historial', doc.querySelector('[data-rango-categorias="6"]') !== null);
@@ -449,6 +448,11 @@ comprobar(
   filaServicios().includes('$ 220.000 / $ 300.000'),
   filaServicios(),
 );
+comprobar(
+  'las categorías con tope muestran cuánto queda del presupuesto',
+  filaServicios().includes('Te quedan $ 80.000 de $ 300.000'),
+  filaServicios(),
+);
 
 clic('.pestana[data-vista="fijos"]');
 clic('[data-pagar]');
@@ -457,6 +461,11 @@ clic('.pestana[data-vista="resumen"]');
 comprobar(
   'al pagarlo pasa de reservado a gastado, no se suma dos veces',
   filaServicios().includes('$ 220.000 / $ 300.000'),
+  filaServicios(),
+);
+comprobar(
+  'con tope también dice cuánto representa del gasto del mes',
+  filaServicios().includes('de tu gasto del mes'),
   filaServicios(),
 );
 comprobar(
