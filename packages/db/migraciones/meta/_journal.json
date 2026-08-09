@@ -15,6 +15,13 @@
       "when": 1786250900533,
       "tag": "0001_deudas",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786284000000,
+      "tag": "0002_personas_correo",
+      "breakpoints": true
     }
   ]
 }

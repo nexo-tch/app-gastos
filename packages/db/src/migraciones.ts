@@ -50,4 +50,10 @@ export const MIGRACIONES: Migracion[] = [
       "ALTER TABLE \"deudas\" ADD CONSTRAINT \"deudas_usuario_id_usuarios_id_fk\" FOREIGN KEY (\"usuario_id\") REFERENCES \"public\".\"usuarios\"(\"id\") ON DELETE cascade ON UPDATE no action;",
     ],
   },
+  {
+    nombre: "0002_personas_correo",
+    sentencias: [
+      "ALTER TABLE \"personas\" ADD COLUMN \"correo\" text;",
+    ],
+  },
 ];

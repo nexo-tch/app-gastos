@@ -104,6 +104,8 @@ export const personas = pgTable(
     id: text('id').notNull(),
     ...dueno(),
     nombre: text('nombre').notNull(),
+    /** Correo de la cuenta de esa persona en la app, para reconocerla al compartir gastos. */
+    correo: text('correo'),
     ...orden,
   },
   (t) => ({ pk: primaryKey({ columns: [t.usuarioId, t.id] }) }),

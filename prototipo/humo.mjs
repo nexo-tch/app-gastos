@@ -480,6 +480,50 @@ async function revisarRecibido(enlace, delQueComparte) {
   );
 
   ventana.close();
+
+  // Si ya tenías a esa persona con otro nombre pero su correo de cuenta, no duplica.
+  const previoConCorreo = JSON.parse(JSON.stringify(delQueComparte));
+  previoConCorreo.personas = [{ id: 'amigo', name: 'edxa', email: 'quien@ejemplo.com' }];
+  previoConCorreo.gastos = [];
+  previoConCorreo.repartos = [];
+  previoConCorreo.deudas = [];
+  const cargaConCorreo = { ...carga, de: 'Ed', dc: 'quien@ejemplo.com' };
+  const enlaceConCorreo = `#compartido=${Buffer.from(JSON.stringify(cargaConCorreo))
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')}`;
+  ventana = abrir(previoConCorreo);
+  ventana.close();
+  ventana = new JSDOM(html, {
+    url: `http://localhost/${enlaceConCorreo}`,
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    virtualConsole: consola,
+    beforeParse(window) {
+      const dialogo = window.HTMLDialogElement?.prototype;
+      if (dialogo) {
+        dialogo.showModal = function () {
+          this.open = true;
+        };
+        dialogo.close = function () {
+          this.open = false;
+        };
+      }
+      window.confirm = () => true;
+      window.localStorage.setItem('gastos.prototipo.v1', JSON.stringify(previoConCorreo));
+    },
+  }).window;
+  ventana.document
+    .querySelector('#recibido-agregar')
+    ?.dispatchEvent(new ventana.MouseEvent('click', { bubbles: true }));
+  const suyoCorreo = () => JSON.parse(ventana.localStorage.getItem('gastos.prototipo.v1'));
+  comprobar(
+    'el correo de la cuenta reconoce a la persona aunque el nombre no coincida',
+    suyoCorreo().personas.length === 1 && suyoCorreo().personas[0].name === 'edxa',
+    `${suyoCorreo().personas.length} personas, nombre ${suyoCorreo().personas[0]?.name}`,
+  );
+  ventana.close();
 }
 
 /* ── 11. Lo que se crea sube a la cuenta ────────────────────────── */

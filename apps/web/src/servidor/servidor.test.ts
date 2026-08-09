@@ -164,6 +164,26 @@ describe('guardar y volver a leer', () => {
     });
   });
 
+  it('guarda el correo opcional de una persona', async () => {
+    const usuarioId = await registrar('correo-persona@ejemplo.com');
+
+    await aplicarCambios(
+      usuarioId,
+      0,
+      cambios({
+        personas: {
+          puestos: [{ id: 'p1', name: 'edxa', email: 'Ed@Ejemplo.com', posicion: 0 }],
+        },
+      }),
+    );
+
+    expect((await leerEstado(usuarioId)).personas[0]).toEqual({
+      id: 'p1',
+      name: 'edxa',
+      email: 'ed@ejemplo.com',
+    });
+  });
+
   it('guarda lo que le debo a alguien y que ya se lo pagué', async () => {
     const usuarioId = await registrar('debo@ejemplo.com');
 

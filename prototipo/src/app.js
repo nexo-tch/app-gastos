@@ -372,6 +372,7 @@
   const id = () => Math.random().toString(36).slice(2, 11) + Date.now().toString(36).slice(-4);
   const ahora = () => new Date().toISOString();
   const plata = (centavos) => M.formatMoney(centavos, { currency: 'COP' });
+  const normalizarCorreo = (correo) => String(correo ?? '').trim().toLowerCase();
 
   const escapar = (texto) =>
     String(texto ?? '').replace(/[&<>"']/g, (c) => {
@@ -1186,7 +1187,8 @@
         </div>
 
         <form class="linea-alta" data-nueva-persona>
-          <input class="entrada" name="nombre" placeholder="Nombre de la persona" style="max-width:260px" required />
+          <input class="entrada" name="nombre" placeholder="Nombre de la persona" style="max-width:220px" required />
+          <input class="entrada" name="correo" type="email" placeholder="Correo de su cuenta (opcional)" style="max-width:240px" />
           <button type="submit" class="boton boton--marco">Agregar persona</button>
         </form>
 
@@ -1815,10 +1817,13 @@
     if (!reparto || !gasto) return null;
 
     const quien = almacen.quienSoy();
+    const deudor = personaPorId(reparto.personId);
     const carga = {
       v: 1,
       i: reparto.id,
       de: (quien?.nombre ?? '').trim().slice(0, 40),
+      dc: quien?.correo ? normalizarCorreo(quien.correo).slice(0, 80) : '',
+      pe: deudor?.email ? normalizarCorreo(deudor.email).slice(0, 80) : '',
       q: String(nombreDelGasto(gasto.id, nombreCategoria(gasto.categoryId))).slice(0, 60),
       // El nombre de la categoría, no su identificador: cada cuenta tiene los
       // suyos, pero las de fábrica se llaman igual en las dos.
@@ -1909,6 +1914,8 @@
       return {
         i: typeof carga.i === 'string' ? carga.i.slice(0, 40) : '',
         de: typeof carga.de === 'string' ? carga.de.slice(0, 40).trim() : '',
+        dc: typeof carga.dc === 'string' ? normalizarCorreo(carga.dc).slice(0, 80) : '',
+        pe: typeof carga.pe === 'string' ? normalizarCorreo(carga.pe).slice(0, 80) : '',
         q: typeof carga.q === 'string' ? carga.q.slice(0, 60).trim() : '',
         k: typeof carga.k === 'string' ? carga.k.slice(0, 30).trim() : '',
         c: monto,
@@ -1975,9 +1982,20 @@
     vista = 'personas';
 
     mutar((d) => {
-      let persona = d.personas.find((p) => p.name.toLowerCase() === nombre.toLowerCase());
-      if (!persona) {
-        persona = { id: id(), name: nombre };
+      let persona = M.matchPersonForSharedExpense(d.personas, {
+        correo: carga.dc,
+        nombre,
+      });
+      if (persona) {
+        persona = M.enrichPersonEmail(persona, carga.dc);
+        const indice = d.personas.findIndex((p) => p.id === persona.id);
+        if (indice >= 0) d.personas[indice] = persona;
+      } else {
+        persona = {
+          id: id(),
+          name: nombre,
+          email: carga.dc || null,
+        };
         d.personas.push(persona);
       }
 
@@ -2777,9 +2795,14 @@
     if (!forma) return;
     evento.preventDefault();
     const nombre = forma.elements.nombre.value.trim();
+    const correo = forma.elements.correo.value.trim();
     if (!nombre) return;
     mutar((d) => {
-      d.personas.push({ id: id(), name: nombre });
+      d.personas.push({
+        id: id(),
+        name: nombre,
+        email: correo ? normalizarCorreo(correo) : null,
+      });
     });
     avisar('Persona agregada');
   });

@@ -3,6 +3,8 @@ import { and, asc, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 
+import { normalizarCorreo } from './cuentas.js';
+
 /**
  * El puente entre las dos formas de ver los mismos datos.
  *
@@ -60,9 +62,25 @@ const categoriaSchema = z.object({
 });
 type Categoria = z.input<typeof categoriaSchema>;
 
+const correoPersona = z
+  .string()
+  .max(200)
+  .nullish()
+  .transform((v) => {
+    if (!v?.trim()) return null;
+    const limpio = normalizarCorreo(v);
+    if (!z.string().email().safeParse(limpio).success) {
+      throw new z.ZodError([
+        { code: 'custom', message: 'correo invalido', path: ['email'] },
+      ]);
+    }
+    return limpio;
+  });
+
 const personaSchema = z.object({
   id: identificador,
   name: texto,
+  email: correoPersona,
 });
 type Persona = z.input<typeof personaSchema>;
 
@@ -305,7 +323,7 @@ export async function leerEstado(usuarioId: string): Promise<Estado> {
       color: c.color,
       isArchived: c.archivada,
     })),
-    personas: personas.map((p) => ({ id: p.id, name: p.nombre })),
+    personas: personas.map((p) => ({ id: p.id, name: p.nombre, email: p.correo })),
     gastos: gastos.map((g) => ({
       id: g.id,
       accountId: g.cuentaId,
@@ -512,6 +530,7 @@ export async function aplicarCambios(
         id: p.id,
         usuarioId,
         nombre: p.name,
+        correo: p.email,
         posicion: p.posicion,
       })),
     );
