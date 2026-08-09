@@ -77,6 +77,11 @@
     let quejado = false;
     let cuenta = null;
     let alRecibir = () => {};
+    let firmaAlEstrenar = null;
+    let intentosEstrenar = 0;
+
+    const fetchCuenta = (url, init = {}) =>
+      fetch(url, { credentials: 'same-origin', ...init });
 
     /**
      * Dos filas son la misma si dicen lo mismo, aunque no lo digan igual.
@@ -145,9 +150,10 @@
 
     const adoptar = (estado, revisionServidor) => {
       revision = revisionServidor;
-      confirmado = estado;
-      cache.escribir(estado);
-      alRecibir(estado);
+      const copia = JSON.parse(JSON.stringify(estado));
+      confirmado = JSON.parse(JSON.stringify(copia));
+      cache.escribir(copia);
+      alRecibir(copia);
     };
 
     /** El estado que se esta pintando ahora mismo, para poder reintentar. */
@@ -163,7 +169,7 @@
       enviando = true;
 
       try {
-        const respuesta = await fetch('/api/estado', {
+        const respuesta = await fetchCuenta('/api/estado', {
           method: 'PUT',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ revision, cambios }),
@@ -181,6 +187,13 @@
           const cuerpo = await respuesta.json();
           adoptar(cuerpo.datos, cuerpo.revision);
           avisar('Otro dispositivo tenia cambios más nuevos. Recargué lo que hay en tu cuenta.');
+          return;
+        }
+
+        if (respuesta.status === 400) {
+          console.error('El servidor rechazó los cambios', await respuesta.text());
+          avisar('No pude guardar en tu cuenta. Revisa la conexión e inténtalo de nuevo.');
+          programar(8000);
           return;
         }
 
@@ -207,10 +220,107 @@
       }
     }
 
+    /** Sube de una vez la copia local cuando la cuenta en el servidor está vacía. */
+    async function subirCompleto(estado) {
+      if (!conCuenta || enviando) return false;
+
+      enviando = true;
+      try {
+        const respuesta = await fetchCuenta('/api/estado/completo', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ revision, datos: estado }),
+        });
+
+        if (respuesta.status === 401) {
+          location.href = '/entrar';
+          return false;
+        }
+
+        if (!respuesta.ok) throw new Error(`El servidor respondio ${respuesta.status}`);
+
+        const cuerpo = await respuesta.json();
+        revision = cuerpo.revision;
+        adoptar(cuerpo.datos ?? estado, revision);
+        if (quejado) quejado = false;
+        avisar('Todo guardado en tu cuenta.');
+        return true;
+      } catch (error) {
+        console.warn('No se pudo subir la copia local', error);
+        if (!quejado) {
+          quejado = true;
+          avisar('Sin conexión. Lo guardo aquí y lo subo cuando vuelva.');
+        }
+        programar(8000);
+        return false;
+      } finally {
+        enviando = false;
+      }
+    }
+
     function programar(espera = 700) {
       if (!conCuenta) return;
       clearTimeout(temporizador);
       temporizador = setTimeout(() => empujar(), espera);
+    }
+
+    /**
+       * Trae la cuenta del servidor. Si la cuenta esta vacia y este navegador
+       * tiene datos de antes, los sube solos en vez de tirarlos.
+       */
+    async function estrenar(estadoLocal) {
+      vigente = estadoLocal;
+      if (!conCuenta) return;
+
+      firmaAlEstrenar = firma(estadoLocal);
+
+      let cuerpo;
+      try {
+        const respuesta = await fetchCuenta('/api/estado', { headers: { accept: 'application/json' } });
+        if (respuesta.status === 401) {
+          location.href = '/entrar';
+          return;
+        }
+        if (!respuesta.ok) throw new Error(`El servidor respondio ${respuesta.status}`);
+        cuerpo = await respuesta.json();
+        intentosEstrenar = 0;
+      } catch (error) {
+        console.warn('No se pudo leer la cuenta', error);
+        quejado = true;
+        avisar('Sin conexión con tu cuenta. Trabajo con lo que hay en este navegador.');
+        const espera = Math.min(30_000, 2000 * 2 ** intentosEstrenar++);
+        setTimeout(() => estrenar(vigente ?? estadoLocal), espera);
+        return;
+      }
+
+      cuenta = { nombre: cuerpo.nombre ?? '', correo: cuerpo.correo ?? '' };
+      revision = cuerpo.revision;
+      confirmado = JSON.parse(JSON.stringify(cuerpo.datos));
+
+      const cuentaVacia =
+        cuerpo.datos.gastos.length === 0 &&
+        cuerpo.datos.personas.length === 0 &&
+        cuerpo.datos.fijos.length === 0;
+      const aquiHayAlgo =
+        estadoLocal &&
+        (estadoLocal.gastos?.length > 0 ||
+          estadoLocal.personas?.length > 0 ||
+          estadoLocal.fijos?.length > 0);
+
+      if (cuentaVacia && aquiHayAlgo) {
+        avisar('Subiendo lo que tenías en este navegador…');
+        await subirCompleto(vigente);
+        return;
+      }
+
+      // Si alguien registro algo mientras llegaba la cuenta, no se pisa con lo
+      // del servidor: se sube el delta y la pantalla se queda como esta.
+      if (firma(vigente) !== firmaAlEstrenar) {
+        programar(0);
+        return;
+      }
+
+      adoptar(cuerpo.datos, cuerpo.revision);
     }
 
     if (conCuenta) {
@@ -220,7 +330,10 @@
         clearTimeout(temporizador);
         empujar({ ultimoAliento: true });
       });
-      addEventListener('online', () => programar(0));
+      addEventListener('online', () => {
+        if (!confirmado && vigente) estrenar(vigente);
+        else programar(0);
+      });
     }
 
     return {
@@ -250,58 +363,7 @@
         cache.borrar();
       },
 
-      /**
-       * Trae la cuenta del servidor. Si la cuenta esta vacia y este navegador
-       * tiene datos de antes, ofrece subirlos en vez de tirarlos.
-       */
-      async estrenar(estadoLocal) {
-        vigente = estadoLocal;
-        if (!conCuenta) return;
-
-        let cuerpo;
-        try {
-          const respuesta = await fetch('/api/estado', { headers: { accept: 'application/json' } });
-          if (respuesta.status === 401) {
-            location.href = '/entrar';
-            return;
-          }
-          if (!respuesta.ok) throw new Error(`El servidor respondio ${respuesta.status}`);
-          cuerpo = await respuesta.json();
-        } catch (error) {
-          console.warn('No se pudo leer la cuenta', error);
-          quejado = true;
-          avisar('Sin conexión con tu cuenta. Trabajo con lo que hay en este navegador.');
-          return;
-        }
-
-        cuenta = { nombre: cuerpo.nombre ?? '', correo: cuerpo.correo ?? '' };
-        revision = cuerpo.revision;
-        confirmado = cuerpo.datos;
-
-        const cuentaVacia =
-          cuerpo.datos.gastos.length === 0 &&
-          cuerpo.datos.personas.length === 0 &&
-          cuerpo.datos.fijos.length === 0;
-        const aquiHayAlgo =
-          estadoLocal &&
-          (estadoLocal.gastos?.length > 0 ||
-            estadoLocal.personas?.length > 0 ||
-            estadoLocal.fijos?.length > 0);
-
-        if (cuentaVacia && aquiHayAlgo) {
-          const subir = confirm(
-            'Este navegador tiene gastos guardados de antes y tu cuenta está vacía. ' +
-              '¿Los subo a tu cuenta?',
-          );
-          if (subir) {
-            programar(0);
-            avisar('Subiendo lo que tenías guardado…');
-            return;
-          }
-        }
-
-        adoptar(cuerpo.datos, cuerpo.revision);
-      },
+      estrenar,
     };
   })();
 

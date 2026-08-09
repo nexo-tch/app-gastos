@@ -482,6 +482,115 @@ async function revisarRecibido(enlace, delQueComparte) {
   ventana.close();
 }
 
+/* ── 11. Lo que se crea sube a la cuenta ────────────────────────── */
+
+await revisarSincronizacion();
+
+/**
+ * Sin esto la app solo guarda en localStorage: al recargar, si el servidor
+ * no recibió nada, los datos desaparecen.
+ */
+async function revisarSincronizacion() {
+  let revision = 0;
+  const cuentaVacia = () => ({
+    version: 1,
+    cuentas: [
+      { id: 'efectivo', name: 'Efectivo', kind: 'cash' },
+      { id: 'debito', name: 'Débito', kind: 'debit' },
+      { id: 'credito', name: 'Tarjeta de crédito', kind: 'credit' },
+    ],
+    categorias: [
+      { id: 'mercado', name: 'Mercado', color: '#4A9D5B', isArchived: false },
+      { id: 'salidas-comer', name: 'Salidas a comer y domicilios', color: '#E2653C', isArchived: false },
+    ],
+    personas: [],
+    gastos: [],
+    repartos: [],
+    abonos: [],
+    asignaciones: [],
+    deudas: [],
+    presupuestos: {},
+    fijos: [],
+    instancias: [],
+  });
+  let servidor = cuentaVacia();
+  const envios = [];
+
+  const ventana = new JSDOM(html, {
+    url: 'http://localhost/',
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    virtualConsole: consola,
+    beforeParse(window) {
+      const dialogo = window.HTMLDialogElement?.prototype;
+      if (dialogo) {
+        dialogo.showModal = function () {
+          this.open = true;
+        };
+        dialogo.close = function () {
+          this.open = false;
+        };
+      }
+      window.confirm = () => true;
+      window.addEventListener('error', (evento) => fallos.push(evento.error?.stack ?? evento.message));
+
+      window.fetch = async (url, init = {}) => {
+        if (url === '/api/estado' && (!init.method || init.method === 'GET')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              revision,
+              nombre: 'Ana',
+              correo: 'ana@ejemplo.com',
+              datos: JSON.parse(JSON.stringify(servidor)),
+            }),
+          };
+        }
+
+        if (url === '/api/estado' && init.method === 'PUT') {
+          const cuerpo = JSON.parse(init.body);
+          envios.push(cuerpo);
+          revision += 1;
+          for (const persona of cuerpo.cambios.personas.puestos) {
+            const indice = servidor.personas.findIndex((p) => p.id === persona.id);
+            const fila = { id: persona.id, name: persona.name };
+            if (indice >= 0) servidor.personas[indice] = fila;
+            else servidor.personas.push(fila);
+          }
+          return { ok: true, status: 200, json: async () => ({ revision }) };
+        }
+
+        throw new Error(`fetch sin simular: ${url} ${init.method ?? 'GET'}`);
+      };
+    },
+  }).window;
+
+  const doc = ventana.document;
+  const clicSync = (selector) =>
+    doc.querySelector(selector).dispatchEvent(new ventana.MouseEvent('click', { bubbles: true }));
+
+  await new Promise((listo) => setTimeout(listo, 0));
+  await new Promise((listo) => setTimeout(listo, 0));
+
+  clicSync('.pestana[data-vista="personas"]');
+  doc.querySelector('[data-nueva-persona] [name="nombre"]').value = 'Julie';
+  doc.querySelector('[data-nueva-persona]').dispatchEvent(
+    new ventana.Event('submit', { bubbles: true, cancelable: true }),
+  );
+
+  await new Promise((listo) => setTimeout(listo, 900));
+
+  comprobar('crear una persona dispara un guardado en la cuenta', envios.length > 0);
+  comprobar(
+    'el envío incluye a la persona nueva',
+    envios.some((envio) => envio.cambios.personas.puestos.some((p) => p.name === 'Julie')),
+  );
+  comprobar('el servidor la recibe', servidor.personas.some((p) => p.name === 'Julie'));
+
+  ventana.close();
+}
+
 /* ── Resultado ──────────────────────────────────────────────────── */
 
 const malas = pruebas.filter((p) => !p.bien);
