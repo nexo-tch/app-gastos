@@ -34,6 +34,9 @@ const dom = new JSDOM(html, {
     }
     window.confirm = () => true;
     window.prompt = () => 'Invitado';
+    window.navigator.clipboard = {
+      writeText: async () => {},
+    };
     window.addEventListener('error', (evento) => fallos.push(evento.error?.stack ?? evento.message));
   },
 });
@@ -224,9 +227,10 @@ comprobar('el abono se asigna a gastos concretos', guardado().asignaciones.lengt
 
 /* ── 5b. Avisarle a la otra persona de su parte ─────────────────── */
 
-comprobar('cada deuda ofrece avisarle', doc.querySelector('[data-avisar]') !== null);
+const repartoAna = guardado().repartos.find((r) => r.personId === ana.id);
+comprobar('cada deuda ofrece avisarle', repartoAna !== undefined);
 
-clic('[data-avisar]');
+clic(`[data-avisar="${repartoAna.id}"]`);
 comprobar('la hoja de avisar se abre', doc.querySelector('#dialogo-avisar').open === true);
 
 const mensaje = texto('#avisar-mensaje');
@@ -241,6 +245,18 @@ comprobar(
 const enlaceCompartido = mensaje.match(/#compartido=[\w-]+/)?.[0] ?? '';
 comprobar('el enlace no viaja vacío', enlaceCompartido.length > 20);
 
+clic('#avisar-enviar');
+await new Promise((resolve) => setTimeout(resolve, 20));
+comprobar('avisar deja constancia de que ya se compartió', guardado().repartos.find((r) => r.id === repartoAna.id)?.notifiedAt);
+comprobar(
+  'ya avisado cambia a recordar',
+  doc.querySelector(`[data-avisar="${repartoAna.id}"]`) === null &&
+    doc.querySelector(`[data-recordar="${repartoAna.id}"]`) !== null,
+);
+
+clic(`[data-recordar="${repartoAna.id}"]`);
+comprobar('recordar abre la hoja de aviso', doc.querySelector('#dialogo-avisar').open === true);
+comprobar('recordar lo dice en el título', texto('#titulo-avisar').includes('Recordarle'));
 clic('#dialogo-avisar [data-cerrar]');
 
 /* ── 5c. Recibirlo en la app de la otra persona ─────────────────── */

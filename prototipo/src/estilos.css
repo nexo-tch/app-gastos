@@ -1072,6 +1072,14 @@ button {
   text-decoration: line-through;
 }
 
+.deuda__estado {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--texto-3);
+  white-space: nowrap;
+}
+
 /* El botón de la línea no puede estirarla ni robarle sitio al texto. */
 .deuda .boton--chico {
   flex: 0 0 auto;

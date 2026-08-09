@@ -56,4 +56,10 @@ export const MIGRACIONES: Migracion[] = [
       "ALTER TABLE \"personas\" ADD COLUMN \"correo\" text;",
     ],
   },
+  {
+    nombre: "0003_living_selene",
+    sentencias: [
+      "ALTER TABLE \"repartos\" ADD COLUMN \"avisado_en\" timestamp with time zone;",
+    ],
+  },
 ];

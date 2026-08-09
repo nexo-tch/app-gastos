@@ -419,6 +419,14 @@
     );
   };
 
+  const fechaAvisoCorta = (iso) => {
+    const dia = diaDeIso(iso);
+    if (dia === hoyDia()) return 'hoy';
+    const [a, m, d] = dia.split('-').map(Number);
+    const fecha = new Date(Date.UTC(a, m - 1, d));
+    return new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short' }).format(fecha);
+  };
+
   const iniciales = (nombre) =>
     String(nombre)
       .trim()
@@ -1365,6 +1373,8 @@
 
   function filaDeudaCobrar(item, persona) {
     const titulo = `${escapar(nombreDelGasto(item.expenseId, nombreCategoria(item.categoryId)))} · ${escapar(nombreDia(diaDeIso(item.occurredAt)))}`;
+    const reparto = datos.repartos.find((r) => r.id === item.splitId);
+    const yaAvisado = Boolean(reparto?.notifiedAt);
     return `
       <div class="deuda ${item.isSettled ? 'deuda--saldada' : ''}">
         <button type="button" class="deuda__principal" data-gasto="${item.expenseId}">
@@ -1374,9 +1384,13 @@
         ${
           item.isSettled
             ? ''
-            : `<button type="button" class="boton boton--fantasma boton--chico"
-                       data-avisar="${item.splitId}"
-                       aria-label="Avisarle a ${escapar(persona.name)}">Avisar</button>`
+            : yaAvisado
+              ? `<button type="button" class="boton boton--fantasma boton--chico"
+                         data-recordar="${item.splitId}"
+                         aria-label="Recordarle a ${escapar(persona.name)}">Recordar</button>`
+              : `<button type="button" class="boton boton--fantasma boton--chico"
+                         data-avisar="${item.splitId}"
+                         aria-label="Avisarle a ${escapar(persona.name)}">Avisar</button>`
         }
       </div>`;
   }
@@ -1645,6 +1659,7 @@
     if (!hayGente) {
       detalle.innerHTML = '';
       document.getElementById('reparto-resultado').textContent = '';
+      actualizarOpcionAvisarGasto();
       return;
     }
 
@@ -1689,6 +1704,27 @@
       .join(' · ');
 
     salida.innerHTML = `Tu parte: <b>${plata(resultado.myShareCents)}</b>${deOtros ? ` · ${deOtros}` : ''}`;
+    actualizarOpcionAvisarGasto();
+  }
+
+  function personaUsaApp(idPersona) {
+    return Boolean(personaPorId(idPersona)?.email);
+  }
+
+  function actualizarOpcionAvisarGasto() {
+    const wrap = document.getElementById('gasto-avisar-wrap');
+    if (!wrap || !borrador) return;
+
+    const conCorreo = borrador.personas.filter((idPersona) => personaUsaApp(idPersona));
+    wrap.hidden = conCorreo.length === 0;
+    if (conCorreo.length === 0) return;
+
+    const nombres = conCorreo.map((id) => personaPorId(id)?.name).filter(Boolean).join(', ');
+    const editando = Boolean(borrador.id);
+    document.getElementById('gasto-avisar-texto').textContent = editando
+      ? `Avisar de nuevo a ${nombres} si cambió su parte`
+      : `Avisar a ${nombres} al guardar`;
+    document.getElementById('gasto-avisar').checked = !editando;
   }
 
   /* ══ Diálogo de abono ════════════════════════════════════════════ */
@@ -1909,29 +1945,69 @@
       `Te comparto un gasto: ${carga.q}, ${cuando}. Te toca ${plata(carga.c)} de ${plata(carga.t)}.\n\n` +
       `Ábrelo aquí y decides si lo agregas a tus gastos: ${enlace}`;
 
-    return { texto, persona: personaPorId(reparto.personId) };
+    return { texto, persona: personaPorId(reparto.personId), idReparto: reparto.id };
   }
 
   const dialogoAvisar = document.getElementById('dialogo-avisar');
   let avisoPendiente = null;
+  let colaAvisos = null;
+
+  function marcarRepartoAvisado(idReparto) {
+    mutar((d) => {
+      const reparto = d.repartos.find((r) => r.id === idReparto);
+      if (reparto) reparto.notifiedAt = ahora();
+    });
+  }
+
+  function avisoCompletadoCola() {
+    avisoPendiente = null;
+    dialogoAvisar.close();
+    if (!colaAvisos?.length) {
+      colaAvisos = null;
+      return;
+    }
+    colaAvisos.shift();
+    if (colaAvisos.length > 0) {
+      setTimeout(() => abrirAviso(colaAvisos[0]), 60);
+    } else {
+      colaAvisos = null;
+    }
+  }
+
+  function encolarAvisos(ids) {
+    colaAvisos = ids.filter((idReparto) => !datos.repartos.find((r) => r.id === idReparto)?.notifiedAt);
+    if (colaAvisos.length === 0) {
+      colaAvisos = null;
+      return;
+    }
+    abrirAviso(colaAvisos[0]);
+  }
 
   /** En el celular hay que compartir; en el escritorio, copiar y pegar. */
   const sePuedeCompartir = () => typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
-  function abrirAviso(idReparto) {
+  function abrirAviso(idReparto, esRecordatorio = false) {
     const aviso = avisoDeReparto(idReparto);
     if (!aviso) return;
 
-    avisoPendiente = aviso;
+    const reparto = datos.repartos.find((r) => r.id === idReparto);
+    const esRecordar = esRecordatorio || Boolean(reparto?.notifiedAt);
+    avisoPendiente = { ...aviso, esRecordar };
     const nombre = aviso.persona?.name ?? 'esa persona';
 
-    document.getElementById('titulo-avisar').textContent = `Avisarle a ${nombre}`;
-    document.getElementById('avisar-explicacion').textContent =
-      `${nombre} abre el enlace, ve su parte y decide si la agrega a sus gastos como una ` +
-      `deuda contigo. Del resto de tus cuentas no ve nada.`;
+    document.getElementById('titulo-avisar').textContent = esRecordar
+      ? `Recordarle a ${nombre}`
+      : `Avisarle a ${nombre}`;
+    document.getElementById('avisar-explicacion').textContent = esRecordar
+      ? `Ya le avisaste${reparto?.notifiedAt ? ` el ${fechaAvisoCorta(reparto.notifiedAt)}` : ''}. ` +
+        `Si no ha abierto el enlace, puedes enviarle el mensaje otra vez.`
+      : `${nombre} abre el enlace, ve su parte y decide si la agrega a sus gastos como una ` +
+        `deuda contigo. Del resto de tus cuentas no ve nada.`;
     document.getElementById('avisar-mensaje').textContent = aviso.texto;
     document.getElementById('avisar-enviar').textContent = sePuedeCompartir()
-      ? 'Compartir'
+      ? esRecordar
+        ? 'Volver a compartir'
+        : 'Compartir'
       : 'Copiar mensaje';
 
     dialogoAvisar.showModal();
@@ -1940,13 +2016,17 @@
   async function enviarAviso() {
     if (!avisoPendiente) return;
     const texto = avisoPendiente.texto;
+    const idReparto = avisoPendiente.idReparto;
+    const esRecordar = avisoPendiente.esRecordar;
 
     // El enlace va dentro del texto y no como `url` aparte porque hay apps que
     // se quedan con uno de los dos campos y tiran el otro.
     if (sePuedeCompartir()) {
       try {
         await navigator.share({ text: texto });
-        dialogoAvisar.close();
+        marcarRepartoAvisado(idReparto);
+        avisoCompletadoCola();
+        if (esRecordar) avisar('Recordatorio enviado');
         return;
       } catch (error) {
         // Cerrar la hoja de compartir no es un fallo del que haya que avisar.
@@ -1956,8 +2036,9 @@
 
     try {
       await navigator.clipboard.writeText(texto);
-      dialogoAvisar.close();
-      avisar('Mensaje copiado: pégalo en WhatsApp.');
+      marcarRepartoAvisado(idReparto);
+      avisoCompletadoCola();
+      avisar(esRecordar ? 'Recordatorio copiado: pégalo en WhatsApp.' : 'Mensaje copiado: pégalo en WhatsApp.');
     } catch {
       avisar('No se pudo copiar. Selecciona el mensaje y cópialo a mano.');
     }
@@ -2326,10 +2407,13 @@
     const fecha = document.getElementById('gasto-fecha').value || hoyDia();
     const cuenta = document.getElementById('gasto-cuenta').value || null;
     const editando = borrador.id;
-    const repartosNuevos = [];
+    const repartosGuardados = [];
+    const wrapAvisar = document.getElementById('gasto-avisar-wrap');
+    const quiereAvisar = !wrapAvisar.hidden && document.getElementById('gasto-avisar').checked;
 
     mutar((d) => {
       const idGasto = borrador.id ?? id();
+      const repartosPrevios = borrador.id ? d.repartos.filter((r) => r.expenseId === idGasto) : [];
 
       if (borrador.id) {
         const gasto = d.gastos.find((g) => g.id === borrador.id);
@@ -2377,25 +2461,30 @@
 
       for (const parte of resultado.splits) {
         if (parte.amountCents <= 0) continue;
-        const idReparto = id();
-        repartosNuevos.push(idReparto);
+        const previo = repartosPrevios.find((r) => r.personId === parte.personId);
+        const idReparto = previo?.id ?? id();
+        const mismoMonto = previo?.amountCents === parte.amountCents;
+        repartosGuardados.push({ id: idReparto, personId: parte.personId });
         d.repartos.push({
           id: idReparto,
           expenseId: idGasto,
           personId: parte.personId,
           amountCents: parte.amountCents,
+          notifiedAt: previo && mismoMonto ? (previo.notifiedAt ?? null) : null,
         });
       }
     });
 
     avisar(editando ? 'Gasto actualizado' : 'Gasto registrado');
 
-    // Acabado de registrar es cuando el aviso sirve: la otra persona todavía no
-    // sabe que le toca una parte. Se espera a que se cierre esta hoja para abrir
-    // la otra. Si el gasto se repartió entre varios, cada uno lleva su mensaje y
-    // eso se hace mejor desde Personas, uno por uno.
-    if (!editando && repartosNuevos.length === 1) {
-      setTimeout(() => abrirAviso(repartosNuevos[0]), 60);
+    if (quiereAvisar) {
+      const cola = repartosGuardados
+        .filter((reparto) => personaUsaApp(reparto.personId))
+        .map((reparto) => reparto.id)
+        .filter((idReparto) => !datos.repartos.find((r) => r.id === idReparto)?.notifiedAt);
+      if (cola.length) {
+        setTimeout(() => encolarAvisos(cola), 60);
+      }
     }
 
     return true;
@@ -2749,6 +2838,12 @@
     const avisarle = objetivo.closest('[data-avisar]');
     if (avisarle) {
       abrirAviso(avisarle.dataset.avisar);
+      return;
+    }
+
+    const recordar = objetivo.closest('[data-recordar]');
+    if (recordar) {
+      abrirAviso(recordar.dataset.recordar, true);
       return;
     }
 

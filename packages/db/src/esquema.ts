@@ -149,6 +149,7 @@ export const repartos = pgTable(
     gastoId: text('gasto_id').notNull(),
     personaId: text('persona_id').notNull(),
     monto: integer('monto').notNull(),
+    avisadoEn: timestamp('avisado_en', { withTimezone: true }),
   },
   (t) => ({
     pk: primaryKey({ columns: [t.usuarioId, t.id] }),
