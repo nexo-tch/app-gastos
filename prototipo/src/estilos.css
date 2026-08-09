@@ -978,8 +978,23 @@ button {
 .persona__identidad {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
   margin-right: auto;
+}
+
+.persona__nombre-fila {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.icono--mini svg {
+  width: 15px;
+  height: 15px;
 }
 
 .persona__acciones {

@@ -81,14 +81,25 @@
     let intentosEstrenar = 0;
     let notificaciones = [];
     let alNotificaciones = () => {};
+    /** Sin sesión válida: ocultar sync y bandeja, pero la app sigue usable en local. */
+    let sesionActiva = !conCuenta;
+
+    const enlacePublicoPendiente = () => /^#(?:compartido|cuenta)=/.test(location.hash);
+
+    const irAEntrar = () => {
+      if (enlacePublicoPendiente()) return;
+      location.href = '/entrar';
+    };
 
     async function cargarNotificaciones() {
-      if (!conCuenta) return;
+      if (!conCuenta || !sesionActiva) return;
 
       try {
         const respuesta = await fetchCuenta('/api/notificaciones');
         if (respuesta.status === 401) {
-          location.href = '/entrar';
+          sesionActiva = false;
+          alNotificaciones([]);
+          irAEntrar();
           return;
         }
         if (!respuesta.ok) return;
@@ -198,7 +209,8 @@
         });
 
         if (respuesta.status === 401) {
-          location.href = '/entrar';
+          sesionActiva = false;
+          irAEntrar();
           return;
         }
 
@@ -254,7 +266,8 @@
         });
 
         if (respuesta.status === 401) {
-          location.href = '/entrar';
+          sesionActiva = false;
+          irAEntrar();
           return false;
         }
 
@@ -262,6 +275,7 @@
 
         const cuerpo = await respuesta.json();
         revision = cuerpo.revision;
+        sesionActiva = true;
         adoptar(cuerpo.datos ?? estado, revision);
         if (quejado) quejado = false;
         avisar('Todo guardado en tu cuenta.');
@@ -299,14 +313,18 @@
       try {
         const respuesta = await fetchCuenta('/api/estado', { headers: { accept: 'application/json' } });
         if (respuesta.status === 401) {
-          location.href = '/entrar';
+          sesionActiva = false;
+          alNotificaciones([]);
+          irAEntrar();
           return;
         }
         if (!respuesta.ok) throw new Error(`El servidor respondio ${respuesta.status}`);
         cuerpo = await respuesta.json();
         intentosEstrenar = 0;
+        sesionActiva = true;
       } catch (error) {
         console.warn('No se pudo leer la cuenta', error);
+        if (enlacePublicoPendiente()) return;
         quejado = true;
         avisar('Sin conexión con tu cuenta. Trabajo con lo que hay en este navegador.');
         const espera = Math.min(30_000, 2000 * 2 ** intentosEstrenar++);
@@ -367,12 +385,15 @@
       try {
         const respuesta = await fetchCuenta('/api/estado', { headers: { accept: 'application/json' } });
         if (respuesta.status === 401) {
-          location.href = '/entrar';
+          sesionActiva = false;
+          alNotificaciones([]);
+          irAEntrar();
           return;
         }
         if (!respuesta.ok) return;
 
         const cuerpo = await respuesta.json();
+        sesionActiva = true;
         if (cuerpo.revision !== revision || firma(cuerpo.datos) !== firma(confirmado)) {
           adoptar(cuerpo.datos, cuerpo.revision);
         }
@@ -411,6 +432,7 @@
 
       estrenar,
       refrescar,
+      sesionActiva: () => sesionActiva,
       notificaciones: () => notificaciones,
       escucharNotificaciones(fn) {
         alNotificaciones = fn;
@@ -434,7 +456,7 @@
     if (!btn || !badge) return;
 
     const n = notificacionesPendientes.length;
-    btn.hidden = !almacen.conCuenta;
+    btn.hidden = !almacen.conCuenta || !almacen.sesionActiva();
     badge.hidden = n === 0;
     badge.textContent = n > 9 ? '9+' : String(n);
     btn.setAttribute(
@@ -1490,11 +1512,26 @@
         <div class="persona__cabeza">
           <span class="avatar">${escapar(iniciales(persona.name))}</span>
           <div class="persona__identidad">
-            <span class="persona__nombre">${escapar(persona.name)}</span>
-            <button type="button" class="icono icono--mini" data-editar-correo-persona="${persona.id}"
-                    aria-label="${persona.email ? `Cambiar correo de ${escapar(persona.name)}` : `Asociar correo de ${escapar(persona.name)}`}">
-              ✎
-            </button>
+            <div class="persona__nombre-fila">
+              <span class="persona__nombre">${escapar(persona.name)}</span>
+              <button type="button" class="icono icono--mini" data-editar-correo-persona="${persona.id}"
+                      aria-label="${persona.email ? `Cambiar correo de ${escapar(persona.name)}` : `Asociar correo de ${escapar(persona.name)}`}">
+                ✎
+              </button>
+            </div>
+            ${
+              usada
+                ? `<button type="button" class="icono icono--mini" data-compartir-cuenta="${persona.id}"
+                           aria-label="Compartir cuenta con ${escapar(persona.name)}">
+                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                       <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" />
+                       <polyline points="16 6 12 2 8 6" />
+                       <line x1="12" y1="2" x2="12" y2="15" />
+                     </svg>
+                   </button>`
+                : ''
+            }
           </div>
           ${saldos
             .map((s) => `<span class="persona__saldo" data-signo="${s.signo}">${s.texto}</span>`)
@@ -1510,13 +1547,6 @@
             <button type="button" class="boton boton--marco boton--chico" data-debo-persona="${persona.id}">
               Registrar deuda
             </button>
-            ${
-              usada
-                ? `<button type="button" class="boton boton--fantasma boton--chico" data-compartir-cuenta="${persona.id}">
-                     Compartir cuenta
-                   </button>`
-                : ''
-            }
           </div>
           ${
             usada
@@ -2062,6 +2092,14 @@
 
   const MARCA_ENLACE = 'compartido';
 
+  /** Los enlaces van por /r para abrirlos sin sesión (cuenta o gasto compartido). */
+  const baseEnlacePublico = () => {
+    if (typeof fetch === 'function' && !window.SIN_SERVIDOR && location.protocol !== 'file:') {
+      return `${location.origin}/r`;
+    }
+    return location.href.split('#')[0];
+  };
+
   const aClave = (texto) => {
     const bytes = new TextEncoder().encode(texto);
     let binario = '';
@@ -2099,7 +2137,7 @@
       d: diaDeIso(gasto.occurredAt),
     };
 
-    const enlace = `${location.href.split('#')[0]}#${MARCA_ENLACE}=${aClave(JSON.stringify(carga))}`;
+    const enlace = `${baseEnlacePublico()}#${MARCA_ENLACE}=${aClave(JSON.stringify(carga))}`;
     const cuando = nombreDia(carga.d).toLowerCase();
 
     // En primera persona porque lo manda una persona, no la app. El nombre va
@@ -2281,7 +2319,7 @@
       i: items.slice(0, 25),
     };
 
-    const enlace = `${location.href.split('#')[0]}#${MARCA_CUENTA}=${aClave(JSON.stringify(carga))}`;
+    const enlace = `${baseEnlacePublico()}#${MARCA_CUENTA}=${aClave(JSON.stringify(carga))}`;
 
     const lineas = [`Te comparto nuestra cuenta${persona.name ? `, ${persona.name}` : ''}:`];
     if (teDebe > 0) lineas.push(`Me debes ${plata(teDebe)}`);

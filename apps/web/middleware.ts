@@ -25,6 +25,11 @@ export function middleware(request: NextRequest) {
     return reescribir(request, '/gastos.html');
   }
 
+  /** Enlaces compartidos (#compartido, #cuenta): lectura sin pedir sesión. */
+  if (pathname === '/r') {
+    return reescribir(request, '/gastos.html');
+  }
+
   return NextResponse.next();
 }
 
@@ -41,5 +46,5 @@ function reescribir(request: NextRequest, destino: string) {
 }
 
 export const config = {
-  matcher: ['/', '/entrar'],
+  matcher: ['/', '/entrar', '/r'],
 };
