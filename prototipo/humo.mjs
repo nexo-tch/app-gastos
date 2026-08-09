@@ -129,6 +129,7 @@ comprobar('guarda solo mi parte aparte', ultimo.myShareCents === 3000000, String
 
 clic('.pestana[data-vista="personas"]');
 comprobar('la vista de personas lista a Ana', texto('#lienzo').includes('Ana'));
+comprobar('Personas no muestra el tablero del mes', doc.getElementById('tablero').hidden === true);
 comprobar('la lista de personas es compacta', doc.querySelector('.persona-fila') !== null);
 comprobar(
   'el desglose por categoría no está en la lista',
@@ -137,6 +138,7 @@ comprobar(
 
 const ana = guardado().personas.find((p) => p.name === 'Ana');
 clic(`[data-ver-persona="${ana.id}"]`);
+comprobar('el detalle tampoco muestra el tablero del mes', doc.getElementById('tablero').hidden === true);
 comprobar(
   'te debe desglosado por categoría en el detalle',
   doc.querySelector('.persona__por-categoria') !== null,
@@ -273,10 +275,10 @@ clic('#dialogo-avisar [data-cerrar]');
 
 comprobar(
   'cada persona usada ofrece compartir cuenta',
-  doc.querySelector(`[data-compartir-cuenta="${ana.id}"]`) !== null,
+  doc.querySelector('.persona__encabezado-iconos [data-compartir-cuenta]') !== null,
 );
 
-clic(`[data-compartir-cuenta="${ana.id}"]`);
+clic('.persona__encabezado-iconos [data-compartir-cuenta]');
 comprobar(
   'la hoja de compartir cuenta se abre',
   doc.querySelector('#dialogo-compartir-cuenta').open === true,

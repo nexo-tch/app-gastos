@@ -1031,32 +1031,38 @@ button {
 .bloque__cabeza--volver {
   flex-wrap: wrap;
   align-items: flex-start;
+  border-bottom: 0;
+  padding-bottom: 0;
 }
 
-.bloque__cabeza-titulo {
-  flex: 1;
-  min-width: 0;
+.persona__encabezado {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.persona__encabezado h2 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.persona__encabezado-iconos {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .persona--detalle {
   border-top: 0;
-  padding-top: 4px;
+  padding-top: 10px;
 }
 
-.persona__herramientas {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+.persona__acciones--detalle {
+  flex: none;
+  padding-left: 0;
   padding-bottom: 8px;
-}
-
-.persona__herramientas-espaciador {
-  flex: 1;
-  min-width: 8px;
 }
 
 .persona {

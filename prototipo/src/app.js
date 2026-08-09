@@ -1397,19 +1397,10 @@
     const cuentas = porCobrar();
     const mias = porPagar();
 
-    const rotulo =
-      [
-        cuentas.totalPendingCents > 0 ? `${plata(cuentas.totalPendingCents)} por cobrar` : '',
-        mias.totalPendingCents > 0 ? `${plata(mias.totalPendingCents)} por pagar` : '',
-      ]
-        .filter(Boolean)
-        .join(' · ') || 'Todo al día';
-
     return `
       <section class="bloque">
         <div class="bloque__cabeza">
           <h2>Personas</h2>
-          <span class="rotulo">${rotulo}</span>
         </div>
 
         <div class="personas-alta">
@@ -1490,19 +1481,35 @@
 
     const cuentas = porCobrar();
     const mias = porPagar();
-    const cuenta = cuentas.byPerson.find((p) => p.personId === persona.id);
-    const mio = mias.byPerson.find((p) => p.personId === persona.id);
-    const pendienteCobrar = cuenta?.pendingCents ?? 0;
-    const pendientePagar = mio?.pendingCents ?? 0;
-    const rotulo = resumenLineaPersona(pendienteCobrar, pendientePagar);
+    const usada =
+      datos.repartos.some((r) => r.personId === persona.id) ||
+      datos.deudas.some((d) => d.personId === persona.id);
 
     return `
       <section class="bloque">
         <div class="bloque__cabeza bloque__cabeza--volver">
           <button type="button" class="boton boton--fantasma boton--chico" data-volver-personas>‹ Personas</button>
-          <div class="bloque__cabeza-titulo">
-            <h2>${escapar(persona.name)}</h2>
-            <span class="rotulo">${rotulo}</span>
+        </div>
+        <div class="persona__encabezado">
+          <h2>${escapar(persona.name)}</h2>
+          <div class="persona__encabezado-iconos">
+            <button type="button" class="icono icono--mini" data-editar-correo-persona="${persona.id}"
+                    aria-label="${persona.email ? `Cambiar correo de ${escapar(persona.name)}` : `Asociar correo de ${escapar(persona.name)}`}">
+              ✎
+            </button>
+            ${
+              usada
+                ? `<button type="button" class="icono icono--mini" data-compartir-cuenta="${persona.id}"
+                           aria-label="Compartir cuenta con ${escapar(persona.name)}">
+                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                       <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" />
+                       <polyline points="16 6 12 2 8 6" />
+                       <line x1="12" y1="2" x2="12" y2="15" />
+                     </svg>
+                   </button>`
+                : ''
+            }
           </div>
         </div>
         ${detallePersona(persona, cuentas, mias)}
@@ -1625,25 +1632,7 @@
 
     return `
       <div class="persona persona--detalle">
-        <div class="persona__herramientas">
-          <button type="button" class="icono icono--mini" data-editar-correo-persona="${persona.id}"
-                  aria-label="${persona.email ? `Cambiar correo de ${escapar(persona.name)}` : `Asociar correo de ${escapar(persona.name)}`}">
-            ✎
-          </button>
-          ${
-            usada
-              ? `<button type="button" class="icono icono--mini" data-compartir-cuenta="${persona.id}"
-                         aria-label="Compartir cuenta con ${escapar(persona.name)}">
-                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
-                        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                     <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" />
-                     <polyline points="16 6 12 2 8 6" />
-                     <line x1="12" y1="2" x2="12" y2="15" />
-                   </svg>
-                 </button>`
-              : ''
-          }
-          <span class="persona__herramientas-espaciador"></span>
+        <div class="persona__acciones persona__acciones--detalle">
           ${
             pendienteCobrar > 0
               ? `<button type="button" class="boton boton--marco boton--chico" data-abonar="${persona.id}">
@@ -1790,7 +1779,14 @@
     const resumen = resumenDelMes(mes);
 
     document.getElementById('mes-nombre').textContent = nombreMes(mes);
-    pintarTablero(resumen);
+
+    const tablero = document.getElementById('tablero');
+    if (vista === 'personas') {
+      tablero.hidden = true;
+    } else {
+      tablero.hidden = false;
+      pintarTablero(resumen);
+    }
 
     document.querySelectorAll('.pestana').forEach((boton) => {
       const activa = boton.dataset.vista === vista;
