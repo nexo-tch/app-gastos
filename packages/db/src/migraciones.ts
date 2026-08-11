@@ -76,4 +76,12 @@ export const MIGRACIONES: Migracion[] = [
       "CREATE INDEX \"notificaciones_pendientes_idx\" ON \"notificaciones\" USING btree (\"usuario_id\",\"creada_en\");",
     ],
   },
+  {
+    nombre: '0006_push_suscripciones',
+    sentencias: [
+      'CREATE TABLE "push_suscripciones" (\n\t"id" text NOT NULL,\n\t"usuario_id" text NOT NULL,\n\t"endpoint" text NOT NULL,\n\t"p256dh" text NOT NULL,\n\t"auth" text NOT NULL,\n\t"creada_en" timestamp with time zone DEFAULT now() NOT NULL,\n\tCONSTRAINT "push_suscripciones_usuario_id_id_pk" PRIMARY KEY("usuario_id","id")\n);',
+      'ALTER TABLE "push_suscripciones" ADD CONSTRAINT "push_suscripciones_usuario_id_usuarios_id_fk" FOREIGN KEY ("usuario_id") REFERENCES "public"."usuarios"("id") ON DELETE cascade ON UPDATE no action;',
+      'CREATE UNIQUE INDEX "push_suscripciones_endpoint_idx" ON "push_suscripciones" USING btree ("usuario_id","endpoint");',
+    ],
+  },
 ];

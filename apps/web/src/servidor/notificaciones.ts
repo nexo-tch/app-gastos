@@ -2,6 +2,7 @@ import { base, esquema } from '@gastos/db';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { normalizarCorreo } from './cuentas.js';
 import { CompartidoInvalido } from './compartido.js';
+import { enviarPushNuevoAviso } from './push.js';
 
 export interface CargaCompartida {
   v: number;
@@ -131,6 +132,14 @@ export async function entregarCompartidoInApp(
         leidaEn: null,
       },
     });
+
+  const pendientes = await listarNotificacionesPendientes(receptor.id);
+  void enviarPushNuevoAviso(receptor.id, {
+    emisorNombre: (emisor?.nombre ?? carga.de).trim() || 'Alguien',
+    tituloGasto: carga.q,
+    montoCentavos: carga.c,
+    pendientes: pendientes.length,
+  }).catch(() => {});
 
   return { entregada: true };
 }

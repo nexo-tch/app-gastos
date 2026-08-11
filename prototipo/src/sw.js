@@ -61,3 +61,56 @@ self.addEventListener('fetch', (evento) => {
       ),
   );
 });
+
+self.addEventListener('push', (evento) => {
+  let datos = {
+    title: 'Gastos',
+    body: 'Tienes un aviso nuevo',
+    url: '/gastos.html',
+    badge: 1,
+  };
+
+  try {
+    if (evento.data) datos = { ...datos, ...evento.data.json() };
+  } catch {
+    /* payload opcional */
+  }
+
+  const badge = Number(datos.badge) || 0;
+
+  evento.waitUntil(
+    Promise.all([
+      self.registration.showNotification(datos.title, {
+        body: datos.body,
+        icon: '/icono-192.png',
+        badge: '/icono-192.png',
+        data: { url: datos.url ?? '/gastos.html' },
+      }),
+      typeof self.navigator?.setAppBadge === 'function'
+        ? badge > 0
+          ? self.navigator.setAppBadge(Math.min(badge, 99))
+          : self.navigator.clearAppBadge()
+        : Promise.resolve(),
+    ]),
+  );
+});
+
+self.addEventListener('notificationclick', (evento) => {
+  evento.notification.close();
+  const destino = evento.notification.data?.url ?? '/gastos.html';
+
+  evento.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((lista) => {
+      for (const cliente of lista) {
+        if ('focus' in cliente) {
+          const url = new URL(cliente.url);
+          if (url.pathname.endsWith('gastos.html') || url.pathname === '/') {
+            if ('navigate' in cliente) cliente.navigate(destino);
+            return cliente.focus();
+          }
+        }
+      }
+      return clients.openWindow(destino);
+    }),
+  );
+});
