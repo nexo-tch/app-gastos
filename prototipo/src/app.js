@@ -180,6 +180,30 @@
     const hayAlgoQueMandar = (cambios) =>
       Object.values(cambios).some((c) => c.puestos.length > 0 || c.quitados.length > 0);
 
+    /**
+     * El receptor puede aceptar en el servidor mientras aquí el reparto sigue
+     * sin `acceptedAt`. Si subimos ese null, le quitamos el estado al emisor.
+     */
+    const fusionarRepartos = (estado, base) => {
+      if (!estado || !base?.repartos?.length) return estado;
+
+      const mapa = new Map(base.repartos.map((r) => [r.id, r]));
+      let cambio = false;
+      const repartos = (estado.repartos ?? []).map((r) => {
+        const previo = mapa.get(r.id);
+        if (!previo) return r;
+
+        const notifiedAt = r.notifiedAt ?? previo.notifiedAt ?? null;
+        const acceptedAt = r.acceptedAt ?? previo.acceptedAt ?? null;
+        if (notifiedAt === r.notifiedAt && acceptedAt === r.acceptedAt) return r;
+
+        cambio = true;
+        return { ...r, notifiedAt, acceptedAt };
+      });
+
+      return cambio ? { ...estado, repartos } : estado;
+    };
+
     const adoptar = (estado, revisionServidor) => {
       revision = revisionServidor;
       const copia = JSON.parse(JSON.stringify(estado));
@@ -194,10 +218,10 @@
     async function empujar({ ultimoAliento = false } = {}) {
       if (!conCuenta || enviando || !vigente || !confirmado) return;
 
-      const cambios = calcularCambios(vigente);
+      const instantanea = fusionarRepartos(vigente, confirmado);
+      const cambios = calcularCambios(instantanea);
       if (!hayAlgoQueMandar(cambios)) return;
 
-      const instantanea = vigente;
       enviando = true;
 
       try {
@@ -421,8 +445,8 @@
       },
 
       guardar(estado) {
-        vigente = estado;
-        cache.escribir(estado);
+        vigente = fusionarRepartos(estado, confirmado);
+        cache.escribir(vigente);
         programar();
       },
 
@@ -1771,30 +1795,85 @@
       </div>`;
   }
 
+  function registrarCobroPuntual(idReparto) {
+    const cuentas = porCobrar();
+    let item = null;
+    let idPersona = null;
+
+    for (const cuenta of cuentas.byPerson) {
+      item = cuenta.items.find((i) => i.splitId === idReparto);
+      if (item) {
+        idPersona = cuenta.personId;
+        break;
+      }
+    }
+
+    if (!item || item.pendingCents <= 0 || !idPersona) return;
+
+    mutar((d) => {
+      const idAbono = id();
+      d.abonos.push({
+        id: idAbono,
+        personId: idPersona,
+        amountCents: item.pendingCents,
+        paidAt: ahora(),
+      });
+      d.asignaciones.push({
+        id: id(),
+        settlementId: idAbono,
+        splitId: idReparto,
+        amountCents: item.pendingCents,
+      });
+    });
+
+    avisar('Pago registrado');
+  }
+
+  function deshacerCobroPuntual(idReparto) {
+    mutar((d) => {
+      const asignaciones = d.asignaciones.filter((a) => a.splitId === idReparto);
+      if (asignaciones.length === 0) return;
+
+      const abonos = new Set(asignaciones.map((a) => a.settlementId));
+      d.asignaciones = d.asignaciones.filter((a) => a.splitId !== idReparto);
+      d.abonos = d.abonos.filter((a) => !abonos.has(a.id) || d.asignaciones.some((x) => x.settlementId === a.id));
+    });
+
+    avisar('Pago deshecho');
+  }
+
   function filaDeudaCobrar(item, persona) {
     const titulo = `${escapar(nombreDelGasto(item.expenseId, nombreCategoria(item.categoryId)))} · ${escapar(nombreDia(diaDeIso(item.occurredAt)))}`;
     const reparto = datos.repartos.find((r) => r.id === item.splitId);
     const yaAvisado = Boolean(reparto?.notifiedAt);
     const aceptado = Boolean(reparto?.acceptedAt);
+    const btnPagó =
+      !item.isSettled && item.pendingCents > 0
+        ? `<button type="button" class="boton boton--fantasma boton--chico"
+                   data-cobro="${item.splitId}"
+                   aria-label="Marcar que ${escapar(persona.name)} pagó este gasto">Pagó</button>`
+        : '';
+    const estado =
+      item.isSettled
+        ? `<button type="button" class="boton boton--fantasma boton--chico"
+                   data-deshacer-cobro="${item.splitId}">Deshacer</button>`
+        : aceptado
+          ? `<span class="deuda__estado">Aceptado</span>`
+          : yaAvisado
+            ? `<button type="button" class="boton boton--fantasma boton--chico"
+                       data-recordar="${item.splitId}"
+                       aria-label="Recordarle a ${escapar(persona.name)}">Recordar</button>`
+            : `<button type="button" class="boton boton--fantasma boton--chico"
+                       data-avisar="${item.splitId}"
+                       aria-label="Avisarle a ${escapar(persona.name)}">Avisar</button>`;
+
     return `
       <div class="deuda ${item.isSettled ? 'deuda--saldada' : ''}">
         <button type="button" class="deuda__principal" data-gasto="${item.expenseId}">
           <span class="deuda__que">${titulo}</span>
           <span class="deuda__cuanto">${plata(item.pendingCents || item.amountCents)}</span>
         </button>
-        ${
-          item.isSettled
-            ? ''
-            : aceptado
-              ? `<span class="deuda__estado">Aceptado</span>`
-              : yaAvisado
-                ? `<button type="button" class="boton boton--fantasma boton--chico"
-                           data-recordar="${item.splitId}"
-                           aria-label="Recordarle a ${escapar(persona.name)}">Recordar</button>`
-                : `<button type="button" class="boton boton--fantasma boton--chico"
-                           data-avisar="${item.splitId}"
-                           aria-label="Avisarle a ${escapar(persona.name)}">Avisar</button>`
-        }
+        ${btnPagó}${estado}
       </div>`;
   }
 
@@ -3686,6 +3765,18 @@
         const deuda = d.deudas.find((x) => x.id === idDeuda);
         if (deuda) deuda.settledAt = deuda.settledAt ? null : ahora();
       });
+      return;
+    }
+
+    const cobro = objetivo.closest('[data-cobro]');
+    if (cobro) {
+      registrarCobroPuntual(cobro.dataset.cobro);
+      return;
+    }
+
+    const deshacerCobro = objetivo.closest('[data-deshacer-cobro]');
+    if (deshacerCobro) {
+      deshacerCobroPuntual(deshacerCobro.dataset.deshacerCobro);
       return;
     }
 

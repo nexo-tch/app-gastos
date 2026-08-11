@@ -443,6 +443,38 @@ async function guardarFilas(
   }
 }
 
+/** No dejar que un guardado local borre avisos o aceptaciones hechas en el servidor. */
+async function guardarRepartos(
+  tx: Tx,
+  repartos: Array<{
+    id: string;
+    usuarioId: string;
+    gastoId: string;
+    personaId: string;
+    monto: number;
+    avisadoEn: Date | null | undefined;
+    aceptadoEn: Date | null | undefined;
+  }>,
+): Promise<void> {
+  if (repartos.length === 0) return;
+
+  for (const tanda of enTandas(repartos)) {
+    await tx
+      .insert(esquema.repartos)
+      .values(tanda)
+      .onConflictDoUpdate({
+        target: [esquema.repartos.usuarioId, esquema.repartos.id],
+        set: {
+          gastoId: sql.raw('excluded.gasto_id'),
+          personaId: sql.raw('excluded.persona_id'),
+          monto: sql.raw('excluded.monto'),
+          avisadoEn: sql`COALESCE(excluded.avisado_en, ${esquema.repartos.avisadoEn})`,
+          aceptadoEn: sql`COALESCE(excluded.aceptado_en, ${esquema.repartos.aceptadoEn})`,
+        },
+      });
+  }
+}
+
 async function quitarFilas(
   tx: Tx,
   tabla: PgTable & { usuarioId: PgColumn; id: PgColumn },
@@ -565,10 +597,8 @@ export async function aplicarCambios(
       })),
     );
 
-    await guardarFilas(
+    await guardarRepartos(
       tx,
-      esquema.repartos,
-      clave,
       cambios.repartos.puestos.map((r) => ({
         id: r.id,
         usuarioId,

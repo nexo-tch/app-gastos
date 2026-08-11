@@ -278,6 +278,23 @@ comprobar('recordar abre la hoja de aviso', doc.querySelector('#dialogo-avisar')
 comprobar('recordar lo dice en el título', texto('#titulo-avisar').includes('Recordarle'));
 clic('#dialogo-avisar [data-cerrar]');
 
+const pendienteAntes = repartoAna.amountCents - 2000000;
+comprobar(
+  'cada deuda pendiente ofrece marcar si pagó',
+  doc.querySelector(`[data-cobro="${repartoAna.id}"]`) !== null,
+);
+clic(`[data-cobro="${repartoAna.id}"]`);
+comprobar(
+  'el cobro queda ligado a ese gasto',
+  guardado().asignaciones.some(
+    (a) => a.splitId === repartoAna.id && a.amountCents === pendienteAntes,
+  ),
+);
+comprobar(
+  'al cobrar ya no queda pendiente ese gasto',
+  doc.querySelector(`[data-cobro="${repartoAna.id}"]`) === null,
+);
+
 /* ── 5d. Compartir resumen de cuenta ─────────────────────────────── */
 
 comprobar(

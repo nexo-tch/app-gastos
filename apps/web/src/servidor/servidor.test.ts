@@ -369,6 +369,64 @@ describe('compartido aceptado', () => {
     expect((await leerEstado(emisorId)).repartos[0]?.acceptedAt).toBeTruthy();
   });
 
+  it('no borra una aceptacion al guardar el reparto sin acceptedAt', async () => {
+    const emisorId = await registrar('emisor-merge@ejemplo.com');
+
+    const revision = await aplicarCambios(
+      emisorId,
+      0,
+      cambios({
+        gastos: {
+          puestos: [
+            {
+              id: 'g1',
+              categoryId: 'mercado',
+              amountTotalCents: 6000000,
+              myShareCents: 3000000,
+              merchantRaw: 'Cena',
+              occurredAt: '2026-08-02T12:00:00-05:00',
+            },
+          ],
+        },
+        repartos: {
+          puestos: [
+            {
+              id: 'split-merge',
+              expenseId: 'g1',
+              personId: 'ana',
+              amountCents: 3000000,
+            },
+          ],
+        },
+      }),
+    );
+
+    await marcarCompartidoAceptado({
+      repartoId: 'split-merge',
+      emisorCorreo: 'emisor-merge@ejemplo.com',
+      montoCentavos: 3000000,
+    });
+
+    await aplicarCambios(
+      emisorId,
+      revision + 1,
+      cambios({
+        repartos: {
+          puestos: [
+            {
+              id: 'split-merge',
+              expenseId: 'g1',
+              personId: 'ana',
+              amountCents: 3000000,
+            },
+          ],
+        },
+      }),
+    );
+
+    expect((await leerEstado(emisorId)).repartos[0]?.acceptedAt).toBeTruthy();
+  });
+
   it('rechaza montos que no coinciden', async () => {
     const emisorId = await registrar('otro-emisor@ejemplo.com');
 
