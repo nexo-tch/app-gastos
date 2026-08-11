@@ -1736,9 +1736,9 @@
     const botonCobrarTodo =
       pendientesCobrar.length > 0
         ? `<div class="persona__bloque-acciones">
-             <button type="button" class="boton boton--fantasma boton--chico"
+             <button type="button" class="boton boton--marco boton--chico"
                      data-cobrar-todo="${persona.id}">
-               Me pagó todo
+               Pagar todo
              </button>
            </div>`
         : '';
@@ -1746,9 +1746,9 @@
     const botonPagarTodo =
       pendientesPagar.length > 0
         ? `<div class="persona__bloque-acciones">
-             <button type="button" class="boton boton--fantasma boton--chico"
+             <button type="button" class="boton boton--marco boton--chico"
                      data-pagar-todo="${persona.id}">
-               Pagué todo
+               Pagar todo
              </button>
            </div>`
         : '';
