@@ -481,54 +481,6 @@
     promesa?.catch?.(() => {});
   }
 
-  function clavePublicaVapid(base64) {
-    const padding = '='.repeat((4 - (base64.length % 4)) % 4);
-    const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const raw = atob(b64);
-    const out = new Uint8Array(raw.length);
-    for (let i = 0; i < raw.length; i += 1) out[i] = raw.charCodeAt(i);
-    return out;
-  }
-
-  async function registrarPushSuscripcion({ pedirPermiso = false } = {}) {
-    if (!almacen.conCuenta || !almacen.sesionActiva()) return;
-    if (!('PushManager' in window) || !('Notification' in window) || !('serviceWorker' in navigator)) return;
-
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      const resp = await fetch('/api/push/vapid', { credentials: 'same-origin' });
-      if (!resp.ok) return;
-
-      const { publicKey } = await resp.json();
-      if (!publicKey) return;
-
-      if (Notification.permission === 'denied') return;
-
-      if (Notification.permission === 'default') {
-        if (!pedirPermiso) return;
-        const perm = await Notification.requestPermission();
-        if (perm !== 'granted') return;
-      }
-
-      let sub = await reg.pushManager.getSubscription();
-      if (!sub) {
-        sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: clavePublicaVapid(publicKey),
-        });
-      }
-
-      await fetch('/api/push/suscribir', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(sub.toJSON()),
-      });
-    } catch (error) {
-      console.warn('No se pudo registrar push', error);
-    }
-  }
-
   function pintarBadgeNotificaciones() {
     const btn = document.getElementById('btn-notificaciones');
     const badge = document.getElementById('notificaciones-badge');
@@ -574,7 +526,6 @@
   function abrirNotificaciones() {
     pintarNotificaciones();
     dialogoNotificaciones.showModal();
-    void registrarPushSuscripcion({ pedirPermiso: true });
   }
 
   async function marcarNotificacionLeida(id) {
@@ -4321,13 +4272,9 @@
   // senal. No guarda datos, solo la cascara.
   if (almacen.conCuenta && 'serviceWorker' in navigator) {
     addEventListener('load', () => {
-      navigator.serviceWorker
-        .register('/sw.js')
-        .then(() => navigator.serviceWorker.ready)
-        .then(() => registrarPushSuscripcion())
-        .catch((error) => {
-          console.warn('No se pudo instalar el service worker', error);
-        });
+      navigator.serviceWorker.register('/sw.js').catch((error) => {
+        console.warn('No se pudo instalar el service worker', error);
+      });
     });
   }
 })();

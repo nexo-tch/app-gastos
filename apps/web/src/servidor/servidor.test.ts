@@ -16,7 +16,6 @@ import {
   listarNotificacionesPendientes,
   marcarNotificacionLeida,
 } from './notificaciones.js';
-import { claveVapidPublica, guardarSuscripcionPush } from './push.js';
 import { borrarSesion, nuevaSesion, usuarioDeToken } from './sesion.js';
 
 beforeAll(async () => {
@@ -596,35 +595,6 @@ describe('avisos in-app', () => {
     const actualizada = await marcarNotificacionLeida(receptorId, pendientes[0]!.id);
     expect(actualizada).toBe(true);
     expect(await listarNotificacionesPendientes(receptorId)).toHaveLength(0);
-  });
-});
-
-describe('push', () => {
-  it('devuelve null sin VAPID_PUBLIC_KEY', () => {
-    const previa = process.env.VAPID_PUBLIC_KEY;
-    delete process.env.VAPID_PUBLIC_KEY;
-    expect(claveVapidPublica()).toBeNull();
-    if (previa) process.env.VAPID_PUBLIC_KEY = previa;
-  });
-
-  it('guarda una suscripción push por usuario', async () => {
-    const usuarioId = await registrar('push@ejemplo.com');
-
-    const ok = await guardarSuscripcionPush(usuarioId, {
-      endpoint: 'https://push.ejemplo/notificaciones/abc',
-      keys: { p256dh: 'clave-publica', auth: 'secreto' },
-    });
-
-    expect(ok).toBe(true);
-
-    const db = await base();
-    const filas = await db
-      .select()
-      .from(esquema.pushSuscripciones)
-      .where(eq(esquema.pushSuscripciones.usuarioId, usuarioId));
-
-    expect(filas).toHaveLength(1);
-    expect(filas[0]?.endpoint).toBe('https://push.ejemplo/notificaciones/abc');
   });
 });
 

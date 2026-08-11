@@ -292,20 +292,3 @@ export const notificaciones = pgTable(
     pendientesIdx: index('notificaciones_pendientes_idx').on(t.usuarioId, t.creadaEn),
   }),
 );
-
-/** Suscripciones Web Push para avisar con la app cerrada. */
-export const pushSuscripciones = pgTable(
-  'push_suscripciones',
-  {
-    id: text('id').notNull(),
-    ...dueno(),
-    endpoint: text('endpoint').notNull(),
-    p256dh: text('p256dh').notNull(),
-    auth: text('auth').notNull(),
-    creadaEn: timestamp('creada_en', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    pk: primaryKey({ columns: [t.usuarioId, t.id] }),
-    endpointIdx: uniqueIndex('push_suscripciones_endpoint_idx').on(t.usuarioId, t.endpoint),
-  }),
-);
