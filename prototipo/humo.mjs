@@ -192,6 +192,10 @@ comprobar(
   'entra en tus gastos del mes',
   guardado().gastos.some((g) => g.merchantRaw === 'Hamburguesa' && g.myShareCents === 2500000),
 );
+comprobar(
+  'con una deuda también ofrece pagar todo',
+  doc.querySelector(`[data-pagar-todo="${ana.id}"]`) !== null,
+);
 
 clic(`[data-debo-persona="${ana.id}"]`);
 doc.getElementById('debo-descripcion').value = 'Pizza';
@@ -263,6 +267,10 @@ doc.querySelector('#forma-abono').dispatchEvent(
 
 comprobar('el abono queda registrado', guardado().abonos.length === 1);
 comprobar('el abono se asigna a gastos concretos', guardado().asignaciones.length > 0);
+comprobar(
+  'con un cobro pendiente también ofrece marcar que pagó todo',
+  doc.querySelector(`[data-cobrar-todo="${ana.id}"]`) !== null,
+);
 
 /* ── 5b. Avisarle a la otra persona de su parte ─────────────────── */
 

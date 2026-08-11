@@ -1733,22 +1733,35 @@
     );
     const pendientesPagar = (mio?.items ?? []).filter((deuda) => !deuda.settledAt);
 
+    const botonCobrarTodo =
+      pendientesCobrar.length > 0
+        ? `<div class="persona__bloque-acciones">
+             <button type="button" class="boton boton--fantasma boton--chico"
+                     data-cobrar-todo="${persona.id}">
+               Me pagó todo
+             </button>
+           </div>`
+        : '';
+
+    const botonPagarTodo =
+      pendientesPagar.length > 0
+        ? `<div class="persona__bloque-acciones">
+             <button type="button" class="boton boton--fantasma boton--chico"
+                     data-pagar-todo="${persona.id}">
+               Pagué todo
+             </button>
+           </div>`
+        : '';
+
     const bloqueCobrar = hayBloqueCobrar
         ? `<div class="persona__bloque persona__bloque--cobrar">
-             <div class="persona__bloque-cabeza">
-               <span class="persona__bloque-titulo">Te debe</span>
-               <span class="persona__bloque-total cifra">${plata(pendienteCobrar)}</span>
+             <div class="persona__bloque-encabezado">
+               <div class="persona__bloque-cabeza">
+                 <span class="persona__bloque-titulo">Te debe</span>
+                 <span class="persona__bloque-total cifra">${plata(pendienteCobrar)}</span>
+               </div>
+               ${botonCobrarTodo}
              </div>
-             ${
-               pendientesCobrar.length > 1
-                 ? `<div class="persona__bloque-acciones">
-                      <button type="button" class="boton boton--fantasma boton--chico"
-                              data-cobrar-todo="${persona.id}">
-                        Me pagó todo
-                      </button>
-                    </div>`
-                 : ''
-             }
              ${resumenCategoriasPersona(porCategoriaCobrar)}
              <div class="persona__bloque-lista">
                ${
@@ -1770,20 +1783,13 @@
 
     const bloquePagar = hayBloquePagar
         ? `<div class="persona__bloque persona__bloque--pagar">
-             <div class="persona__bloque-cabeza">
-               <span class="persona__bloque-titulo">Le debes</span>
-               <span class="persona__bloque-total cifra">${plata(pendientePagar)}</span>
+             <div class="persona__bloque-encabezado">
+               <div class="persona__bloque-cabeza">
+                 <span class="persona__bloque-titulo">Le debes</span>
+                 <span class="persona__bloque-total cifra">${plata(pendientePagar)}</span>
+               </div>
+               ${botonPagarTodo}
              </div>
-             ${
-               pendientesPagar.length > 1
-                 ? `<div class="persona__bloque-acciones">
-                      <button type="button" class="boton boton--fantasma boton--chico"
-                              data-pagar-todo="${persona.id}">
-                        Pagué todo
-                      </button>
-                    </div>`
-                 : ''
-             }
              ${resumenCategoriasPersona(porCategoriaPagar)}
              <div class="persona__bloque-lista">
                ${
@@ -1873,11 +1879,13 @@
     if (!persona || !cuenta || cuenta.pendingCents <= 0) return;
 
     const pendientes = cuenta.items.filter((item) => !item.isSettled && item.pendingCents > 0);
-    if (pendientes.length < 2) return;
+    if (pendientes.length === 0) return;
 
+    const cantidadGastos =
+      pendientes.length === 1 ? '1 gasto' : `${pendientes.length} gastos`;
     const mensaje =
       `¿Marcar que ${persona.name} te pagó todo lo pendiente?\n\n` +
-      `${plata(cuenta.pendingCents)} en ${pendientes.length} gastos.`;
+      `${plata(cuenta.pendingCents)} en ${cantidadGastos}.`;
     if (!confirm(mensaje)) return;
 
     const propuesta = M.proposeSettlementAllocation(cuenta.pendingCents, cuenta.items);
@@ -1908,11 +1916,13 @@
     if (!persona || !mio || mio.pendingCents <= 0) return;
 
     const pendientes = mio.items.filter((deuda) => !deuda.settledAt);
-    if (pendientes.length < 2) return;
+    if (pendientes.length === 0) return;
 
+    const cantidadGastos =
+      pendientes.length === 1 ? '1 gasto' : `${pendientes.length} gastos`;
     const mensaje =
       `¿Marcar que ya pagaste todo lo que le debes a ${persona.name}?\n\n` +
-      `${plata(mio.pendingCents)} en ${pendientes.length} gastos.`;
+      `${plata(mio.pendingCents)} en ${cantidadGastos}.`;
     if (!confirm(mensaje)) return;
 
     const cuando = ahora();
