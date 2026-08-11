@@ -474,6 +474,13 @@
 
   const dialogoNotificaciones = document.getElementById('dialogo-notificaciones');
 
+  function actualizarBadgeEnIcono(n) {
+    if (!('setAppBadge' in navigator)) return;
+
+    const promesa = n > 0 ? navigator.setAppBadge(Math.min(n, 99)) : navigator.clearAppBadge();
+    promesa?.catch?.(() => {});
+  }
+
   function pintarBadgeNotificaciones() {
     const btn = document.getElementById('btn-notificaciones');
     const badge = document.getElementById('notificaciones-badge');
@@ -487,6 +494,9 @@
       'aria-label',
       n > 0 ? `${n} aviso${n === 1 ? '' : 's'} pendiente${n === 1 ? '' : 's'}` : 'Avisos',
     );
+
+    if (almacen.conCuenta && almacen.sesionActiva()) actualizarBadgeEnIcono(n);
+    else actualizarBadgeEnIcono(0);
   }
 
   function pintarNotificaciones() {
