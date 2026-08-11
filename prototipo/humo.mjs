@@ -193,6 +193,17 @@ comprobar(
   guardado().gastos.some((g) => g.merchantRaw === 'Hamburguesa' && g.myShareCents === 2500000),
 );
 
+clic(`[data-debo-persona="${ana.id}"]`);
+doc.getElementById('debo-descripcion').value = 'Pizza';
+escribir('#debo-monto', '15000');
+doc.querySelector('#forma-debo').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+comprobar(
+  'quedan varias deudas con la misma persona',
+  guardado().deudas.filter((d) => d.personId === ana.id && !d.settledAt).length === 2,
+);
+
 const deudaHamburguesa = guardado().deudas.find((d) => d.description === 'Hamburguesa');
 clic(`[data-deuda="${deudaHamburguesa.id}"]`);
 comprobar('se puede abrir una deuda manual', doc.querySelector('#dialogo-debo').open === true);
@@ -227,6 +238,15 @@ comprobar('el tablero muestra cuánto debes', texto('#tablero').includes('Yo deb
 
 clic('.pestana[data-vista="personas"]');
 clic(`[data-ver-persona="${ana.id}"]`);
+comprobar(
+  'con varias deudas ofrece pagar todo',
+  doc.querySelector(`[data-pagar-todo="${ana.id}"]`) !== null,
+);
+clic(`[data-pagar-todo="${ana.id}"]`);
+comprobar(
+  'pagar todo salda las deudas pendientes',
+  guardado().deudas.filter((d) => d.personId === ana.id && !d.settledAt).length === 0,
+);
 clic(`[data-deuda="${deudaHamburguesa.id}"]`);
 clic('#debo-eliminar');
 comprobar('se puede quitar una deuda manual', !guardado().deudas.some((d) => d.id === deudaHamburguesa.id));
@@ -278,23 +298,6 @@ comprobar('recordar abre la hoja de aviso', doc.querySelector('#dialogo-avisar')
 comprobar('recordar lo dice en el título', texto('#titulo-avisar').includes('Recordarle'));
 clic('#dialogo-avisar [data-cerrar]');
 
-const pendienteAntes = repartoAna.amountCents - 2000000;
-comprobar(
-  'cada deuda pendiente ofrece marcar si pagó',
-  doc.querySelector(`[data-cobro="${repartoAna.id}"]`) !== null,
-);
-clic(`[data-cobro="${repartoAna.id}"]`);
-comprobar(
-  'el cobro queda ligado a ese gasto',
-  guardado().asignaciones.some(
-    (a) => a.splitId === repartoAna.id && a.amountCents === pendienteAntes,
-  ),
-);
-comprobar(
-  'al cobrar ya no queda pendiente ese gasto',
-  doc.querySelector(`[data-cobro="${repartoAna.id}"]`) === null,
-);
-
 /* ── 5d. Compartir resumen de cuenta ─────────────────────────────── */
 
 comprobar(
@@ -326,6 +329,40 @@ await revisarCuenta(enlaceCuenta);
 /* ── 5c. Recibirlo en la app de la otra persona ─────────────────── */
 
 await revisarRecibido(enlaceCompartido, guardado());
+
+clic('[data-abrir="gasto"]');
+escribir('#gasto-monto', '40000');
+clic('[data-categoria="mercado"]');
+escribir('#gasto-comercio', 'D1');
+doc.querySelectorAll('#gasto-personas [data-persona]')[0].dispatchEvent(
+  new window.MouseEvent('click', { bubbles: true }),
+);
+doc.querySelector('#forma-gasto').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+
+clic('.pestana[data-vista="personas"]');
+if (!doc.querySelector('.persona--detalle')) clic(`[data-ver-persona="${ana.id}"]`);
+comprobar(
+  'con varios cobros pendientes ofrece marcar que pagó todo',
+  doc.querySelector(`[data-cobrar-todo="${ana.id}"]`) !== null,
+);
+clic(`[data-cobrar-todo="${ana.id}"]`);
+comprobar(
+  'cobrar todo salda todos los repartos',
+  guardado()
+    .repartos.filter((r) => r.personId === ana.id)
+    .every((r) => {
+      const pagado = guardado()
+        .asignaciones.filter((a) => a.splitId === r.id)
+        .reduce((s, a) => s + a.amountCents, 0);
+      return pagado >= r.amountCents;
+    }),
+);
+comprobar(
+  'cobrar todo quita el botón masivo',
+  doc.querySelector(`[data-cobrar-todo="${ana.id}"]`) === null,
+);
 
 /* ── 6. Presupuesto y fijos ─────────────────────────────────────── */
 

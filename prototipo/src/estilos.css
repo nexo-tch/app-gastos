@@ -1231,6 +1231,13 @@ button {
   font-weight: 600;
 }
 
+.persona__bloque-acciones {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -2px;
+  margin-bottom: 6px;
+}
+
 .persona__por-categoria {
   display: flex;
   flex-direction: column;

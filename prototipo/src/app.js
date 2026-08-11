@@ -1728,12 +1728,27 @@
       (deuda) => deuda.amountCents,
     );
 
+    const pendientesCobrar = (cuenta?.items ?? []).filter(
+      (item) => !item.isSettled && item.pendingCents > 0,
+    );
+    const pendientesPagar = (mio?.items ?? []).filter((deuda) => !deuda.settledAt);
+
     const bloqueCobrar = hayBloqueCobrar
         ? `<div class="persona__bloque persona__bloque--cobrar">
              <div class="persona__bloque-cabeza">
                <span class="persona__bloque-titulo">Te debe</span>
                <span class="persona__bloque-total cifra">${plata(pendienteCobrar)}</span>
              </div>
+             ${
+               pendientesCobrar.length > 1
+                 ? `<div class="persona__bloque-acciones">
+                      <button type="button" class="boton boton--fantasma boton--chico"
+                              data-cobrar-todo="${persona.id}">
+                        Me pagó todo
+                      </button>
+                    </div>`
+                 : ''
+             }
              ${resumenCategoriasPersona(porCategoriaCobrar)}
              <div class="persona__bloque-lista">
                ${
@@ -1759,6 +1774,16 @@
                <span class="persona__bloque-titulo">Le debes</span>
                <span class="persona__bloque-total cifra">${plata(pendientePagar)}</span>
              </div>
+             ${
+               pendientesPagar.length > 1
+                 ? `<div class="persona__bloque-acciones">
+                      <button type="button" class="boton boton--fantasma boton--chico"
+                              data-pagar-todo="${persona.id}">
+                        Pagué todo
+                      </button>
+                    </div>`
+                 : ''
+             }
              ${resumenCategoriasPersona(porCategoriaPagar)}
              <div class="persona__bloque-lista">
                ${
@@ -1840,6 +1865,65 @@
     });
 
     avisar('Pago deshecho');
+  }
+
+  function cobrarTodoDePersona(idPersona) {
+    const persona = personaPorId(idPersona);
+    const cuenta = porCobrar().byPerson.find((p) => p.personId === idPersona);
+    if (!persona || !cuenta || cuenta.pendingCents <= 0) return;
+
+    const pendientes = cuenta.items.filter((item) => !item.isSettled && item.pendingCents > 0);
+    if (pendientes.length < 2) return;
+
+    const mensaje =
+      `¿Marcar que ${persona.name} te pagó todo lo pendiente?\n\n` +
+      `${plata(cuenta.pendingCents)} en ${pendientes.length} gastos.`;
+    if (!confirm(mensaje)) return;
+
+    const propuesta = M.proposeSettlementAllocation(cuenta.pendingCents, cuenta.items);
+    mutar((d) => {
+      const idAbono = id();
+      d.abonos.push({
+        id: idAbono,
+        personId: idPersona,
+        amountCents: cuenta.pendingCents,
+        paidAt: ahora(),
+      });
+      for (const asignacion of propuesta.allocations) {
+        d.asignaciones.push({
+          id: id(),
+          settlementId: idAbono,
+          splitId: asignacion.splitId,
+          amountCents: asignacion.amountCents,
+        });
+      }
+    });
+
+    avisar(`Listo: ${persona.name} quedó al día contigo`);
+  }
+
+  function pagarTodoDePersona(idPersona) {
+    const persona = personaPorId(idPersona);
+    const mio = porPagar().byPerson.find((p) => p.personId === idPersona);
+    if (!persona || !mio || mio.pendingCents <= 0) return;
+
+    const pendientes = mio.items.filter((deuda) => !deuda.settledAt);
+    if (pendientes.length < 2) return;
+
+    const mensaje =
+      `¿Marcar que ya pagaste todo lo que le debes a ${persona.name}?\n\n` +
+      `${plata(mio.pendingCents)} en ${pendientes.length} gastos.`;
+    if (!confirm(mensaje)) return;
+
+    const cuando = ahora();
+    mutar((d) => {
+      for (const item of pendientes) {
+        const deuda = d.deudas.find((x) => x.id === item.id);
+        if (deuda && !deuda.settledAt) deuda.settledAt = cuando;
+      }
+    });
+
+    avisar(`Listo: al día con ${persona.name}`);
   }
 
   function filaDeudaCobrar(item, persona) {
@@ -3777,6 +3861,18 @@
     const deshacerCobro = objetivo.closest('[data-deshacer-cobro]');
     if (deshacerCobro) {
       deshacerCobroPuntual(deshacerCobro.dataset.deshacerCobro);
+      return;
+    }
+
+    const cobrarTodo = objetivo.closest('[data-cobrar-todo]');
+    if (cobrarTodo) {
+      cobrarTodoDePersona(cobrarTodo.dataset.cobrarTodo);
+      return;
+    }
+
+    const pagarTodo = objetivo.closest('[data-pagar-todo]');
+    if (pagarTodo) {
+      pagarTodoDePersona(pagarTodo.dataset.pagarTodo);
       return;
     }
 
