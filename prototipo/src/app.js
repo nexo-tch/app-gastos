@@ -1229,36 +1229,40 @@
   }
 
   function bloqueDeudasCorto(cuentas) {
-    const conSaldo = cuentas.byPerson.filter((p) => p.netCents !== 0);
+    const filas = datos.personas
+      .map((persona) => ({
+        persona,
+        cents: pendienteCobrarEnMes(cuentas.byPerson.find((p) => p.personId === persona.id), mes),
+      }))
+      .filter((f) => f.cents > 0)
+      .sort((a, b) => b.cents - a.cents);
+    const totalMes = filas.reduce((s, f) => s + f.cents, 0);
 
     return `
       <section class="bloque">
         <div class="bloque__cabeza">
           <h2>Te deben</h2>
+          <span class="rotulo">${escapar(nombreMes(mes))}</span>
           <button type="button" class="boton boton--fantasma boton--chico" data-ir="personas">Ver detalle</button>
         </div>
         ${
-          conSaldo.length === 0
-            ? sinNada('Nadie te debe nada. Vas al día.')
+          filas.length === 0
+            ? sinNada(`Nadie te debe nada en ${nombreMes(mes).toLowerCase()}.`)
             : `<div class="tarjeta">
-                 ${conSaldo
-                   .map((p) => {
-                     const persona = personaPorId(p.personId);
-                     const signo = p.netCents > 0 ? 'debe' : 'favor';
-                     return `
+                 ${filas
+                   .map(
+                     ({ persona, cents }) => `
                        <div class="persona">
                          <div class="persona__cabeza">
-                           <span class="avatar">${escapar(iniciales(persona?.name ?? '?'))}</span>
-                           <span class="persona__nombre">${escapar(persona?.name ?? 'Alguien')}</span>
-                           <span class="persona__saldo" data-signo="${signo}">
-                             ${p.netCents > 0 ? plata(p.netCents) : `${plata(-p.netCents)} a favor`}
-                           </span>
+                           <span class="avatar">${escapar(iniciales(persona.name))}</span>
+                           <span class="persona__nombre">${escapar(persona.name)}</span>
+                           <span class="persona__saldo" data-signo="debe">${plata(cents)}</span>
                          </div>
-                       </div>`;
-                   })
+                       </div>`,
+                   )
                    .join('')}
                </div>
-               <p class="pista">Total pendiente <b class="cifra">${plata(cuentas.totalPendingCents)}</b></p>`
+               <p class="pista">Total del mes <b class="cifra">${plata(totalMes)}</b></p>`
         }
       </section>`;
   }
@@ -1700,6 +1704,7 @@
     const mias = porPagar();
 
     return `
+      ${bloquePersonasPorMes(cuentas)}
       <section class="bloque">
         <div class="bloque__cabeza">
           <h2>Personas</h2>
@@ -1733,11 +1738,69 @@
       </section>`;
   }
 
-  function resumenLineaPersona(pendienteCobrar, pendientePagar) {
+  function resumenLineaPersona(pendienteCobrar, pendientePagar, pendienteCobrarMes) {
     const partes = [];
-    if (pendienteCobrar > 0) partes.push(`Te debe ${plata(pendienteCobrar)}`);
+    if (pendienteCobrarMes > 0) {
+      partes.push(`${plata(pendienteCobrarMes)} en ${nombreMes(mes)}`);
+    }
+    if (pendienteCobrar > 0) {
+      partes.push(
+        pendienteCobrarMes > 0 && pendienteCobrar !== pendienteCobrarMes
+          ? `${plata(pendienteCobrar)} en total`
+          : `Te debe ${plata(pendienteCobrar)}`,
+      );
+    }
     if (pendientePagar > 0) partes.push(`Le debes ${plata(pendientePagar)}`);
     return partes.length > 0 ? partes.join(' · ') : 'Al día';
+  }
+
+  function pendienteCobrarEnMes(cuenta, mesClave) {
+    if (!cuenta) return 0;
+    return cuenta.items
+      .filter(
+        (item) =>
+          !item.isSettled &&
+          item.pendingCents > 0 &&
+          M.monthKeyOf(item.occurredAt, OFFSET) === mesClave,
+      )
+      .reduce((s, item) => s + item.pendingCents, 0);
+  }
+
+  function bloquePersonasPorMes(cuentas) {
+    const filas = datos.personas
+      .map((persona) => ({
+        persona,
+        cents: pendienteCobrarEnMes(cuentas.byPerson.find((p) => p.personId === persona.id), mes),
+      }))
+      .filter((f) => f.cents > 0)
+      .sort((a, b) => b.cents - a.cents);
+
+    if (filas.length === 0) return '';
+
+    const totalMes = filas.reduce((s, f) => s + f.cents, 0);
+
+    return `
+      <section class="bloque">
+        <div class="bloque__cabeza">
+          <h2>Te deben en ${escapar(nombreMes(mes))}</h2>
+          <span class="rotulo">${plata(totalMes)}</span>
+        </div>
+        <div class="tarjeta">
+          ${filas
+            .map(
+              ({ persona, cents }) => `
+                <button type="button" class="persona-fila persona-fila--mes" data-ver-persona="${persona.id}">
+                  <span class="avatar">${escapar(iniciales(persona.name))}</span>
+                  <span class="persona-fila__medio">
+                    <span class="persona-fila__nombre">${escapar(persona.name)}</span>
+                  </span>
+                  <span class="persona-fila__neto cifra" data-signo="favor">${plata(cents)}</span>
+                  <span class="persona-fila__flecha" aria-hidden="true">›</span>
+                </button>`,
+            )
+            .join('')}
+        </div>
+      </section>`;
   }
 
   function filaPersonaResumen(persona, cuentas, mias) {
@@ -1745,6 +1808,7 @@
     const mio = mias.byPerson.find((p) => p.personId === persona.id);
     const pendienteCobrar = cuenta?.pendingCents ?? 0;
     const pendientePagar = mio?.pendingCents ?? 0;
+    const pendienteCobrarMes = pendienteCobrarEnMes(cuenta, mes);
     const credito = cuenta?.creditCents ?? 0;
     const neto = pendienteCobrar - pendientePagar - credito;
 
@@ -1763,7 +1827,7 @@
         <span class="avatar">${escapar(iniciales(persona.name))}</span>
         <span class="persona-fila__medio">
           <span class="persona-fila__nombre">${escapar(persona.name)}</span>
-          <span class="persona-fila__resumen">${resumenLineaPersona(pendienteCobrar, pendientePagar)}</span>
+          <span class="persona-fila__resumen">${resumenLineaPersona(pendienteCobrar, pendientePagar, pendienteCobrarMes)}</span>
         </span>
         ${
           montoDerecha
@@ -1816,6 +1880,36 @@
         </div>
         ${detallePersona(persona, cuentas, mias)}
       </section>`;
+  }
+
+  function totalesPorMes(items, fechaDe, montoDe) {
+    const map = new Map();
+    for (const item of items) {
+      const monto = montoDe(item);
+      if (!monto) continue;
+      const clave = M.monthKeyOf(fechaDe(item), OFFSET);
+      map.set(clave, (map.get(clave) ?? 0) + monto);
+    }
+    return [...map.entries()]
+      .map(([month, totalCents]) => ({ month, totalCents }))
+      .sort((a, b) => b.month.localeCompare(a.month));
+  }
+
+  function resumenMesesPersona(grupos) {
+    if (grupos.length === 0) return '';
+    return `
+      <div class="persona__por-mes">
+        <div class="persona__desglose-titulo">Por mes</div>
+        ${grupos
+          .map(
+            (grupo) => `
+          <div class="persona__categoria-fila">
+            <span class="persona__mes-etiqueta">${escapar(nombreMes(grupo.month))}</span>
+            <span class="persona__categoria-monto cifra">${plata(grupo.totalCents)}</span>
+          </div>`,
+          )
+          .join('')}
+      </div>`;
   }
 
   function totalesPorCategoria(items, categoriaDe, montoDe) {
@@ -1884,9 +1978,19 @@
       (item) => item.categoryId,
       (item) => item.pendingCents || item.amountCents,
     );
+    const porMesCobrar = totalesPorMes(
+      (cuenta?.items ?? []).filter((item) => !item.isSettled && item.pendingCents > 0),
+      (item) => item.occurredAt,
+      (item) => item.pendingCents,
+    );
     const porCategoriaPagar = totalesPorCategoria(
       (mio?.items ?? []).filter((d) => !d.settledAt && d.amountCents > 0),
       categoriaDeDeuda,
+      (deuda) => deuda.amountCents,
+    );
+    const porMesPagar = totalesPorMes(
+      (mio?.items ?? []).filter((d) => !d.settledAt && d.amountCents > 0),
+      (deuda) => deuda.occurredAt,
       (deuda) => deuda.amountCents,
     );
 
@@ -1924,6 +2028,7 @@
                </div>
                ${botonCobrarTodo}
              </div>
+             ${resumenMesesPersona(porMesCobrar)}
              ${resumenCategoriasPersona(porCategoriaCobrar)}
              <div class="persona__bloque-lista">
                ${
@@ -1952,6 +2057,7 @@
                </div>
                ${botonPagarTodo}
              </div>
+             ${resumenMesesPersona(porMesPagar)}
              ${resumenCategoriasPersona(porCategoriaPagar)}
              <div class="persona__bloque-lista">
                ${

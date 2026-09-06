@@ -103,6 +103,7 @@ comprobar('ofrece rangos de meses en el historial', doc.querySelector('[data-ran
 clic('[data-rango-categorias="todo"]');
 comprobar('se puede ver todo el historial por categoría', texto('#lienzo').includes('Todo el historial'));
 comprobar('aparece quién te debe', texto('#lienzo').includes('Ana'));
+comprobar('te deben desglosado por mes en resumen', texto('#lienzo').includes('Total del mes'));
 
 /* ── 3. El presupuesto solo cuenta mi parte ─────────────────────── */
 
@@ -170,6 +171,7 @@ clic('.pestana[data-vista="resumen"]');
 
 clic('.pestana[data-vista="personas"]');
 comprobar('la vista de personas lista a Ana', texto('#lienzo').includes('Ana'));
+comprobar('Personas muestra te deben del mes', texto('#lienzo').includes('Te deben en'));
 comprobar('Personas muestra tablero lite', doc.getElementById('tablero').dataset.modo === 'lite');
 comprobar('Personas sigue mostrando lo que queda', texto('#tablero').includes('Te queda para el mes'));
 comprobar('la lista de personas es compacta', doc.querySelector('.persona-fila') !== null);
@@ -185,6 +187,7 @@ comprobar(
   'te debe desglosado por categoría en el detalle',
   doc.querySelector('.persona__por-categoria') !== null,
 );
+comprobar('te debe desglosado por mes en el detalle', doc.querySelector('.persona__por-mes') !== null);
 const detalleAna = doc.querySelector('#lienzo .persona--detalle');
 comprobar(
   'el monto que te deben no se repite en el detalle de Ana',
