@@ -742,7 +742,6 @@
   let rangoCategorias = 6;
   let filtroCategoria = null;
   let filtroPersonasMes = null;
-  let filtroPersonasCategoria = null;
 
   /** Unico punto de escritura: aplica el cambio, persiste y redibuja. */
   function mutar(cambio) {
@@ -1711,9 +1710,6 @@
 
   /* ══ Vista: personas ═════════════════════════════════════════════ */
 
-  const hayFiltroPersonas = () =>
-    filtroPersonasMes !== null || filtroPersonasCategoria !== null;
-
   function itemCobrarFiltrado(item, mesFiltro, catFiltro) {
     if (item.isSettled || item.pendingCents <= 0) return false;
     if (mesFiltro && M.monthKeyOf(item.occurredAt, OFFSET) !== mesFiltro) return false;
@@ -1767,38 +1763,8 @@
     return [...meses].sort((a, b) => b.localeCompare(a));
   }
 
-  function categoriasParaFiltroPersona(idPersona) {
-    const ids = new Set();
-    const cuenta = porCobrar().byPerson.find((p) => p.personId === idPersona);
-    for (const item of cuenta?.items ?? []) {
-      if (itemCobrarFiltrado(item, filtroPersonasMes, null) && item.categoryId) {
-        ids.add(item.categoryId);
-      }
-    }
-    for (const deuda of datos.deudas) {
-      if (deuda.personId !== idPersona) continue;
-      if (itemPagarFiltrado(deuda, filtroPersonasMes, null)) {
-        const id = categoriaDeDeuda(deuda);
-        if (id) ids.add(id);
-      }
-    }
-    return [...ids]
-      .map((id) => categoriaPorId(id))
-      .filter(Boolean)
-      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
-  }
-
   function etiquetaFiltroPersonasMes() {
     return filtroPersonasMes ? nombreMes(filtroPersonasMes) : '';
-  }
-
-  function etiquetaFiltroPersonas() {
-    const partes = [];
-    if (filtroPersonasMes) partes.push(nombreMes(filtroPersonasMes));
-    if (filtroPersonasCategoria) {
-      partes.push(nombreCategoria(filtroPersonasCategoria));
-    }
-    return partes.join(' · ');
   }
 
   function filtrosPersonasMes() {
@@ -1829,29 +1795,6 @@
     return `
       <div class="personas-filtros">
         ${filtrosPersonasMes()}
-      </div>`;
-  }
-
-  function filtrosPersonaDetalle(idPersona) {
-    const categorias = categoriasParaFiltroPersona(idPersona);
-
-    return `
-      <div class="personas-filtros">
-        ${filtrosPersonasMes()}
-        <label class="campo personas-filtros__categoria">
-          <span class="campo__etiqueta">Categoría</span>
-          <select class="entrada" id="filtro-personas-categoria">
-            <option value="todo" ${filtroPersonasCategoria === null ? 'selected' : ''}>Todas</option>
-            ${categorias
-              .map(
-                (cat) => `
-              <option value="${cat.id}" ${filtroPersonasCategoria === cat.id ? 'selected' : ''}>
-                ${escapar(cat.name)}
-              </option>`,
-              )
-              .join('')}
-          </select>
-        </label>
       </div>`;
   }
 
@@ -1964,7 +1907,7 @@
         };
       })();
 
-    const filtrado = montos ? filtroPersonasMes !== null : hayFiltroPersonas();
+    const filtrado = filtroPersonasMes !== null;
 
     let montoDerecha = '';
     let signoNeto = 'cero';
@@ -2032,7 +1975,7 @@
             }
           </div>
         </div>
-        ${filtrosPersonaDetalle(persona.id)}
+        ${filtrosPersonasLista()}
         ${detallePersona(persona, cuentas, mias)}
       </section>`;
   }
@@ -2108,31 +2051,30 @@
     const cuenta = cuentas.byPerson.find((p) => p.personId === persona.id);
     const mio = mias.byPerson.find((p) => p.personId === persona.id);
     const mesFiltro = filtroPersonasMes;
-    const catFiltro = filtroPersonasCategoria;
-    const filtrado = hayFiltroPersonas();
+    const filtradoMes = mesFiltro !== null;
     const { cobrar: pendienteCobrar, pagar: pendientePagar } = montosPersonaFiltrados(
       cuenta,
       mio,
       mesFiltro,
-      catFiltro,
+      null,
     );
 
-    const itemsCobrarVisibles = filtrado
+    const itemsCobrarVisibles = filtradoMes
       ? [
-          ...(cuenta?.items ?? []).filter((item) => itemCobrarFiltrado(item, mesFiltro, catFiltro)),
+          ...(cuenta?.items ?? []).filter((item) => itemCobrarFiltrado(item, mesFiltro, null)),
           ...(cuenta?.items ?? [])
-            .filter((item) => item.isSettled && itemCobrarCoincideFiltro(item, mesFiltro, catFiltro))
+            .filter((item) => item.isSettled && itemCobrarCoincideFiltro(item, mesFiltro, null))
             .slice(0, 3),
         ]
       : [
           ...(cuenta?.items ?? []).filter((item) => !item.isSettled),
           ...(cuenta?.items ?? []).filter((item) => item.isSettled).slice(0, 3),
         ];
-    const itemsPagarVisibles = filtrado
+    const itemsPagarVisibles = filtradoMes
       ? [
-          ...(mio?.items ?? []).filter((deuda) => itemPagarFiltrado(deuda, mesFiltro, catFiltro)),
+          ...(mio?.items ?? []).filter((deuda) => itemPagarFiltrado(deuda, mesFiltro, null)),
           ...(mio?.items ?? [])
-            .filter((deuda) => deuda.settledAt && itemPagarCoincideFiltro(deuda, mesFiltro, catFiltro))
+            .filter((deuda) => deuda.settledAt && itemPagarCoincideFiltro(deuda, mesFiltro, null))
             .slice(0, 3),
         ]
       : [
@@ -2147,31 +2089,34 @@
     const hayBloqueCobrar =
       pendienteCobrar > 0 ||
       itemsCobrarVisibles.length > 0 ||
-      (!filtrado && (cuenta?.creditCents ?? 0) > 0);
+      (!filtradoMes && (cuenta?.creditCents ?? 0) > 0);
     const hayBloquePagar = pendientePagar > 0 || itemsPagarVisibles.length > 0;
 
-    const porCategoriaCobrar = filtrado
-      ? []
-      : totalesPorCategoria(
-          (cuenta?.items ?? []).filter((item) => !item.isSettled && (item.pendingCents || item.amountCents) > 0),
-          (item) => item.categoryId,
-          (item) => item.pendingCents || item.amountCents,
-        );
-    const porMesCobrar = filtrado
+    const porCategoriaCobrar = totalesPorCategoria(
+      (cuenta?.items ?? []).filter(
+        (item) =>
+          !item.isSettled &&
+          (item.pendingCents || item.amountCents) > 0 &&
+          itemCobrarCoincideFiltro(item, mesFiltro, null),
+      ),
+      (item) => item.categoryId,
+      (item) => item.pendingCents || item.amountCents,
+    );
+    const porMesCobrar = filtradoMes
       ? []
       : totalesPorMes(
           (cuenta?.items ?? []).filter((item) => !item.isSettled && item.pendingCents > 0),
           (item) => item.occurredAt,
           (item) => item.pendingCents,
         );
-    const porCategoriaPagar = filtrado
-      ? []
-      : totalesPorCategoria(
-          (mio?.items ?? []).filter((d) => !d.settledAt && d.amountCents > 0),
-          categoriaDeDeuda,
-          (deuda) => deuda.amountCents,
-        );
-    const porMesPagar = filtrado
+    const porCategoriaPagar = totalesPorCategoria(
+      (mio?.items ?? []).filter(
+        (d) => !d.settledAt && d.amountCents > 0 && itemPagarCoincideFiltro(d, mesFiltro, null),
+      ),
+      categoriaDeDeuda,
+      (deuda) => deuda.amountCents,
+    );
+    const porMesPagar = filtradoMes
       ? []
       : totalesPorMes(
           (mio?.items ?? []).filter((d) => !d.settledAt && d.amountCents > 0),
@@ -2220,8 +2165,8 @@
                  itemsCobrarVisibles.length > 0
                    ? itemsCobrarVisibles.map((item) => filaDeudaCobrar(item, persona)).join('')
                    : `<p class="persona__bloque-vacio">${
-                       filtrado
-                         ? 'Sin gastos compartidos con estos filtros.'
+                       filtradoMes
+                         ? 'Sin gastos compartidos en este mes.'
                          : 'Sin gastos compartidos pendientes.'
                      }</p>`
                }
@@ -2253,7 +2198,7 @@
                  itemsPagarVisibles.length > 0
                    ? itemsPagarVisibles.map((deuda) => filaDeudaPagar(deuda)).join('')
                    : `<p class="persona__bloque-vacio">${
-                       filtrado ? 'Sin deudas con estos filtros.' : 'Sin deudas pendientes.'
+                       filtradoMes ? 'Sin deudas en este mes.' : 'Sin deudas pendientes.'
                      }</p>`
                }
              </div>
@@ -4479,9 +4424,6 @@
 
     const verPersona = objetivo.closest('[data-ver-persona]');
     if (verPersona) {
-      if (personaDetalle !== verPersona.dataset.verPersona) {
-        filtroPersonasCategoria = null;
-      }
       personaDetalle = verPersona.dataset.verPersona;
       pintar();
       return;
@@ -4489,7 +4431,6 @@
 
     if (objetivo.closest('[data-volver-personas]')) {
       personaDetalle = null;
-      filtroPersonasCategoria = null;
       pintar();
       return;
     }
@@ -4945,12 +4886,6 @@
 
   document.addEventListener('change', (evento) => {
     const objetivo = evento.target;
-
-    if (objetivo.id === 'filtro-personas-categoria') {
-      filtroPersonasCategoria = objetivo.value === 'todo' ? null : objetivo.value;
-      pintar();
-      return;
-    }
 
     if (objetivo.id === 'gasto-incluirme') {
       borrador.incluirme = objetivo.checked;

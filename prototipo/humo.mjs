@@ -189,7 +189,7 @@ comprobar(
 const ana = guardado().personas.find((p) => p.name === 'Ana');
 clic(`[data-ver-persona="${ana.id}"]`);
 comprobar('el detalle de persona mantiene tablero lite', doc.getElementById('tablero').dataset.modo === 'lite');
-comprobar('el detalle ofrece filtro de categoría', doc.getElementById('filtro-personas-categoria') !== null);
+comprobar('el detalle no muestra filtro de categoría', doc.getElementById('filtro-personas-categoria') === null);
 comprobar(
   'te debe desglosado por categoría en el detalle',
   doc.querySelector('.persona__por-categoria') !== null,
