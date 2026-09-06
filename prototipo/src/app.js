@@ -2744,9 +2744,32 @@
     };
   }
 
+  function navCoincide(nav) {
+    const mesActual = M.monthKeyOf(new Date(), OFFSET);
+    const mesNav = mesNavValido(nav.mes) ? nav.mes : mesActual;
+    const personaNav =
+      nav.personaDetalle && personaPorId(nav.personaDetalle) ? nav.personaDetalle : null;
+    const pasivoNav =
+      nav.pasivoDetalle && pasivoPorId(nav.pasivoDetalle) ? nav.pasivoDetalle : null;
+    const pmNav = mesNavValido(nav.filtroPersonasMes) ? nav.filtroPersonasMes : null;
+    const fcNav =
+      nav.filtroCategoria && categoriaPorId(nav.filtroCategoria) ? nav.filtroCategoria : null;
+    const fmNav = nav.filtroMedio && cuentaPorId(nav.filtroMedio) ? nav.filtroMedio : null;
+    return (
+      nav.vista === vista &&
+      mesNav === mes &&
+      personaNav === (personaDetalle ?? null) &&
+      pasivoNav === (pasivoDetalle ?? null) &&
+      pmNav === (filtroPersonasMes ?? null) &&
+      fcNav === (filtroCategoria ?? null) &&
+      fmNav === (filtroMedio ?? null)
+    );
+  }
+
   function aplicarNav(nav) {
     vista = nav.vista;
-    if (mesNavValido(nav.mes)) mes = nav.mes;
+    const mesActual = M.monthKeyOf(new Date(), OFFSET);
+    mes = mesNavValido(nav.mes) ? nav.mes : mesActual;
     personaDetalle =
       nav.personaDetalle && personaPorId(nav.personaDetalle) ? nav.personaDetalle : null;
     pasivoDetalle = nav.pasivoDetalle && pasivoPorId(nav.pasivoDetalle) ? nav.pasivoDetalle : null;
@@ -2757,8 +2780,7 @@
     personaDetalleDesglose = null;
   }
 
-  function guardarNavEnHash() {
-    if (hashEsCompartidoOCuenta()) return;
+  function hashNavActual() {
     const params = new URLSearchParams();
     params.set('v', vista);
     const mesActual = M.monthKeyOf(new Date(), OFFSET);
@@ -2768,13 +2790,22 @@
     if (filtroPersonasMes) params.set('pm', filtroPersonasMes);
     if (filtroCategoria) params.set('fc', filtroCategoria);
     if (filtroMedio) params.set('fm', filtroMedio);
-    const destino = `#nav?${params.toString()}`;
-    if (location.hash !== destino) {
-      history.replaceState(null, '', location.pathname + location.search + destino);
+    return `#nav?${params.toString()}`;
+  }
+
+  function guardarNavEnHash() {
+    if (hashEsCompartidoOCuenta()) return;
+    const destino = hashNavActual();
+    if (location.hash === destino) return;
+    const url = location.pathname + location.search + destino;
+    if (location.hash.startsWith('#nav')) {
+      location.hash = destino;
+    } else {
+      history.replaceState(null, '', url);
     }
   }
 
-  function pintar() {
+  function pintar(opciones = {}) {
     asegurarInstancias(mes);
 
     const resumen = resumenDelMes(mes);
@@ -2800,7 +2831,7 @@
     else if (vista === 'fijos') lienzo.innerHTML = vistaFijos();
 
     pintarBadgeNotificaciones();
-    guardarNavEnHash();
+    if (!opciones.sinNav) guardarNavEnHash();
   }
 
   /* ══ Diálogo de gasto ════════════════════════════════════════════ */
@@ -5419,9 +5450,9 @@
   addEventListener('hashchange', () => {
     if (hashEsCompartidoOCuenta()) return;
     const nav = leerNavDesdeHash();
-    if (!nav) return;
+    if (!nav || navCoincide(nav)) return;
     aplicarNav(nav);
-    pintar();
+    pintar({ sinNav: true });
   });
 
   // Cuando el servidor manda su version de los datos, se cambia el estado

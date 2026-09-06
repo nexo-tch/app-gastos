@@ -52,6 +52,21 @@ const clic = (selector) => {
   nodo.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 };
 
+const esperar = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const esperarHash = () =>
+  new Promise((resolve) => {
+    const fin = () => {
+      window.removeEventListener('hashchange', fin);
+      resolve();
+    };
+    window.addEventListener('hashchange', fin);
+    setTimeout(() => {
+      window.removeEventListener('hashchange', fin);
+      resolve();
+    }, 50);
+  });
+
 const escribir = (selector, valor, tipo = 'input') => {
   const nodo = doc.querySelector(selector);
   if (!nodo) throw new Error(`No existe ${selector}`);
@@ -172,8 +187,20 @@ comprobar('cambiar de pestaña actualiza la URL', window.location.hash.includes(
 
 /* ── 5. Cobrar: un abono se reparte del más viejo al más nuevo ──── */
 
+clic('.pestana[data-vista="gastos"]');
+comprobar('Gastos queda en la URL', window.location.hash.includes('v=gastos'));
+const hashAntes = window.location.hash;
+
 clic('.pestana[data-vista="personas"]');
 comprobar('Personas queda en la URL', window.location.hash.includes('v=personas'));
+window.location.hash = hashAntes;
+await esperarHash();
+comprobar(
+  'volver atrás en la URL restaura la pestaña anterior',
+  window.location.hash === hashAntes &&
+    doc.querySelector('.pestana[data-vista="gastos"][aria-current="page"]') !== null,
+);
+clic('.pestana[data-vista="personas"]');
 comprobar('la vista de personas lista a Ana', texto('#lienzo').includes('Ana'));
 comprobar('la lista no muestra filtros de mes', doc.querySelector('.personas-filtros') === null);
 comprobar('la lista no muestra resumen por categoría', doc.querySelector('.personas-resumen-global') === null);
