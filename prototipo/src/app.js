@@ -1980,20 +1980,29 @@
       </section>`;
   }
 
-  function totalesPorMes(items, fechaDe, montoDe) {
-    const map = new Map();
+  function totalesPorMesYCategoria(items, fechaDe, categoriaDe, montoDe) {
+    const porMes = new Map();
     for (const item of items) {
       const monto = montoDe(item);
       if (!monto) continue;
-      const clave = M.monthKeyOf(fechaDe(item), OFFSET);
-      map.set(clave, (map.get(clave) ?? 0) + monto);
+      const month = M.monthKeyOf(fechaDe(item), OFFSET);
+      const catId = categoriaDe(item) ?? 'sin-categoria';
+      if (!porMes.has(month)) porMes.set(month, new Map());
+      const cats = porMes.get(month);
+      cats.set(catId, (cats.get(catId) ?? 0) + monto);
     }
-    return [...map.entries()]
-      .map(([month, totalCents]) => ({ month, totalCents }))
+    return [...porMes.entries()]
+      .map(([month, catsMap]) => ({
+        month,
+        totalCents: [...catsMap.values()].reduce((s, v) => s + v, 0),
+        categorias: [...catsMap.entries()]
+          .map(([categoryId, totalCents]) => ({ categoryId, totalCents }))
+          .sort((a, b) => b.totalCents - a.totalCents),
+      }))
       .sort((a, b) => b.month.localeCompare(a.month));
   }
 
-  function resumenMesesPersona(grupos) {
+  function resumenMesesConCategoriasPersona(grupos) {
     if (grupos.length === 0) return '';
     return `
       <div class="persona__por-mes">
@@ -2001,50 +2010,38 @@
         ${grupos
           .map(
             (grupo) => `
-          <div class="persona__categoria-fila">
-            <span class="persona__mes-etiqueta">${escapar(nombreMes(grupo.month))}</span>
-            <span class="persona__categoria-monto cifra">${plata(grupo.totalCents)}</span>
+          <div class="persona__mes-grupo">
+            <div class="persona__categoria-fila persona__categoria-fila--mes">
+              <span class="persona__mes-etiqueta">${escapar(nombreMes(grupo.month))}</span>
+              <span class="persona__categoria-monto cifra">${plata(grupo.totalCents)}</span>
+            </div>
+            ${
+              grupo.categorias.length > 0
+                ? `<div class="persona__por-categoria persona__por-categoria--anidada">
+                     ${grupo.categorias
+                       .map(
+                         (cat) => `
+                     <div class="persona__categoria-fila persona__categoria-fila--anidada">
+                       <span class="persona__categoria-etiqueta">
+                         <i class="categoria__mecha" style="background:${colorCategoria(cat.categoryId)}"></i>
+                         ${escapar(nombreCategoria(cat.categoryId))}
+                       </span>
+                       <span class="persona__categoria-monto cifra">${plata(cat.totalCents)}</span>
+                     </div>`,
+                       )
+                       .join('')}
+                   </div>`
+                : ''
+            }
           </div>`,
           )
           .join('')}
       </div>`;
-  }
-
-  function totalesPorCategoria(items, categoriaDe, montoDe) {
-    const map = new Map();
-    for (const item of items) {
-      const monto = montoDe(item);
-      if (!monto) continue;
-      const id = categoriaDe(item) ?? 'sin-categoria';
-      map.set(id, (map.get(id) ?? 0) + monto);
-    }
-    return [...map.entries()]
-      .map(([categoryId, totalCents]) => ({ categoryId, totalCents }))
-      .sort((a, b) => b.totalCents - a.totalCents);
   }
 
   function categoriaDeDeuda(deuda) {
     const gasto = datos.gastos.find((g) => g.id === `${deuda.id}-gasto` && !g.deletedAt);
     return gasto?.categoryId ?? null;
-  }
-
-  function resumenCategoriasPersona(grupos) {
-    if (grupos.length === 0) return '';
-    return `
-      <div class="persona__por-categoria">
-        ${grupos
-          .map(
-            (grupo) => `
-          <div class="persona__categoria-fila">
-            <span class="persona__categoria-etiqueta">
-              <i class="categoria__mecha" style="background:${colorCategoria(grupo.categoryId)}"></i>
-              ${escapar(nombreCategoria(grupo.categoryId))}
-            </span>
-            <span class="persona__categoria-monto cifra">${plata(grupo.totalCents)}</span>
-          </div>`,
-          )
-          .join('')}
-      </div>`;
   }
 
   function detallePersona(persona, cuentas, mias) {
@@ -2092,37 +2089,25 @@
       (!filtradoMes && (cuenta?.creditCents ?? 0) > 0);
     const hayBloquePagar = pendientePagar > 0 || itemsPagarVisibles.length > 0;
 
-    const porCategoriaCobrar = totalesPorCategoria(
+    const porMesCobrar = totalesPorMesYCategoria(
       (cuenta?.items ?? []).filter(
         (item) =>
           !item.isSettled &&
           (item.pendingCents || item.amountCents) > 0 &&
           itemCobrarCoincideFiltro(item, mesFiltro, null),
       ),
+      (item) => item.occurredAt,
       (item) => item.categoryId,
       (item) => item.pendingCents || item.amountCents,
     );
-    const porMesCobrar = filtradoMes
-      ? []
-      : totalesPorMes(
-          (cuenta?.items ?? []).filter((item) => !item.isSettled && item.pendingCents > 0),
-          (item) => item.occurredAt,
-          (item) => item.pendingCents,
-        );
-    const porCategoriaPagar = totalesPorCategoria(
+    const porMesPagar = totalesPorMesYCategoria(
       (mio?.items ?? []).filter(
         (d) => !d.settledAt && d.amountCents > 0 && itemPagarCoincideFiltro(d, mesFiltro, null),
       ),
+      (deuda) => deuda.occurredAt,
       categoriaDeDeuda,
       (deuda) => deuda.amountCents,
     );
-    const porMesPagar = filtradoMes
-      ? []
-      : totalesPorMes(
-          (mio?.items ?? []).filter((d) => !d.settledAt && d.amountCents > 0),
-          (deuda) => deuda.occurredAt,
-          (deuda) => deuda.amountCents,
-        );
 
     const pendientesCobrar = (cuenta?.items ?? []).filter(
       (item) => !item.isSettled && item.pendingCents > 0,
@@ -2158,8 +2143,7 @@
                </div>
                ${botonCobrarTodo}
              </div>
-             ${resumenMesesPersona(porMesCobrar)}
-             ${resumenCategoriasPersona(porCategoriaCobrar)}
+             ${resumenMesesConCategoriasPersona(porMesCobrar)}
              <div class="persona__bloque-lista">
                ${
                  itemsCobrarVisibles.length > 0
@@ -2191,8 +2175,7 @@
                </div>
                ${botonPagarTodo}
              </div>
-             ${resumenMesesPersona(porMesPagar)}
-             ${resumenCategoriasPersona(porCategoriaPagar)}
+             ${resumenMesesConCategoriasPersona(porMesPagar)}
              <div class="persona__bloque-lista">
                ${
                  itemsPagarVisibles.length > 0

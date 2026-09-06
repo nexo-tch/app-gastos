@@ -1401,6 +1401,36 @@ button.categoria.categoria--clic:focus-visible {
   border-bottom: 1px solid var(--borde);
 }
 
+.persona__mes-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.persona__mes-grupo + .persona__mes-grupo {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--borde);
+}
+
+.persona__por-categoria--anidada {
+  padding-left: 10px;
+  border-bottom: 0;
+  gap: 2px;
+}
+
+.persona__categoria-fila--mes {
+  font-weight: 600;
+}
+
+.persona__categoria-fila--mes .persona__mes-etiqueta {
+  color: var(--texto);
+}
+
+.persona__categoria-fila--anidada .persona__categoria-etiqueta {
+  font-size: 12px;
+}
+
 .persona__desglose-titulo {
   font-size: 11px;
   font-weight: 600;

@@ -191,10 +191,10 @@ clic(`[data-ver-persona="${ana.id}"]`);
 comprobar('el detalle de persona mantiene tablero lite', doc.getElementById('tablero').dataset.modo === 'lite');
 comprobar('el detalle no muestra filtro de categoría', doc.getElementById('filtro-personas-categoria') === null);
 comprobar(
-  'te debe desglosado por categoría en el detalle',
-  doc.querySelector('.persona__por-categoria') !== null,
+  'te debe desglosado por categoría dentro de cada mes',
+  doc.querySelector('.persona__por-categoria--anidada') !== null,
 );
-comprobar('te debe desglosado por mes en el detalle', doc.querySelector('.persona__por-mes') !== null);
+comprobar('te debe desglosado por mes en el detalle', doc.querySelector('.persona__mes-grupo') !== null);
 const detalleAna = doc.querySelector('#lienzo .persona--detalle');
 comprobar(
   'el monto que te deben no se repite en el detalle de Ana',
