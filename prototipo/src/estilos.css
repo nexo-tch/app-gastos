@@ -1213,14 +1213,17 @@ button.categoria.categoria--clic:focus-visible {
 
 .gastos-filtros {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
 }
 
-.gastos-filtros__grupo {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.gastos-filtros__campo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  min-width: 0;
 }
 
 .gastos-filtros__etiqueta {
@@ -1229,26 +1232,39 @@ button.categoria.categoria--clic:focus-visible {
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--texto-3);
+  white-space: nowrap;
 }
 
-.segmentos--envuelve {
-  display: flex;
-  flex-wrap: wrap;
-  width: fit-content;
-  max-width: 100%;
+.gastos-filtros__select {
+  appearance: none;
+  height: 32px;
+  min-width: 0;
+  max-width: min(180px, 42vw);
+  padding: 0 26px 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background-color: var(--superficie-3);
+  background-image: linear-gradient(45deg, transparent 50%, var(--texto-3) 50%),
+    linear-gradient(135deg, var(--texto-3) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 13px, calc(100% - 9px) 13px;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+  font-family: var(--display);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--texto-2);
+  cursor: pointer;
 }
 
-.segmento--categoria {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.gastos-filtros__select:focus {
+  outline: 2px solid var(--marca);
+  outline-offset: 1px;
 }
 
-.segmento__mecha {
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
-  flex-shrink: 0;
+.gastos-filtros__select--activo {
+  background-color: var(--marca-tenue);
+  color: var(--marca);
+  font-weight: 600;
 }
 
 .persona-fila {

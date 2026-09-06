@@ -1532,48 +1532,41 @@
       categorias.length === 0
         ? ''
         : `
-        <div class="gastos-filtros__grupo">
+        <label class="gastos-filtros__campo">
           <span class="gastos-filtros__etiqueta">Categoría</span>
-          <div class="segmentos segmentos--envuelve" id="filtro-gastos-categoria" role="group" aria-label="Filtrar por categoría">
-            <button type="button" class="segmento" data-filtro-gastos-categoria="todo"
-                    aria-pressed="${filtroCategoria === null ? 'true' : 'false'}">
-              Todas
-            </button>
+          <select class="gastos-filtros__select${filtroCategoria ? ' gastos-filtros__select--activo' : ''}"
+                  id="filtro-gastos-categoria" aria-label="Filtrar por categoría">
+            <option value="todo" ${filtroCategoria === null ? 'selected' : ''}>Todas</option>
             ${categorias
               .map(
                 (cat) => `
-              <button type="button" class="segmento segmento--categoria" data-filtro-gastos-categoria="${cat.id}"
-                      aria-pressed="${filtroCategoria === cat.id ? 'true' : 'false'}">
-                <i class="segmento__mecha" style="background:${cat.color}"></i>
+              <option value="${cat.id}" ${filtroCategoria === cat.id ? 'selected' : ''}>
                 ${escapar(cat.name)}
-              </button>`,
+              </option>`,
               )
               .join('')}
-          </div>
-        </div>`;
+          </select>
+        </label>`;
 
     const grupoMedios =
       medios.length === 0
         ? ''
         : `
-        <div class="gastos-filtros__grupo">
-          <span class="gastos-filtros__etiqueta">Medio de pago</span>
-          <div class="segmentos segmentos--envuelve" id="filtro-gastos-medio" role="group" aria-label="Filtrar por medio de pago">
-            <button type="button" class="segmento" data-filtro-gastos-medio="todo"
-                    aria-pressed="${filtroMedio === null ? 'true' : 'false'}">
-              Todos
-            </button>
+        <label class="gastos-filtros__campo">
+          <span class="gastos-filtros__etiqueta">Medio</span>
+          <select class="gastos-filtros__select${filtroMedio ? ' gastos-filtros__select--activo' : ''}"
+                  id="filtro-gastos-medio" aria-label="Filtrar por medio de pago">
+            <option value="todo" ${filtroMedio === null ? 'selected' : ''}>Todos</option>
             ${medios
               .map(
                 (medio) => `
-              <button type="button" class="segmento" data-filtro-gastos-medio="${medio.id}"
-                      aria-pressed="${filtroMedio === medio.id ? 'true' : 'false'}">
+              <option value="${medio.id}" ${filtroMedio === medio.id ? 'selected' : ''}>
                 ${escapar(medio.name)}
-              </button>`,
+              </option>`,
               )
               .join('')}
-          </div>
-        </div>`;
+          </select>
+        </label>`;
 
     return `
       <div class="gastos-filtros">
@@ -4723,22 +4716,6 @@
       return;
     }
 
-    const filtroCatGastos = objetivo.closest('[data-filtro-gastos-categoria]');
-    if (filtroCatGastos) {
-      const valor = filtroCatGastos.dataset.filtroGastosCategoria;
-      filtroCategoria = valor === 'todo' ? null : valor;
-      pintar();
-      return;
-    }
-
-    const filtroMedioGastos = objetivo.closest('[data-filtro-gastos-medio]');
-    if (filtroMedioGastos) {
-      const valor = filtroMedioGastos.dataset.filtroGastosMedio;
-      filtroMedio = valor === 'todo' ? null : valor;
-      pintar();
-      return;
-    }
-
     const desgloseGlobal = objetivo.closest('[data-personas-desglose-categoria]');
     if (desgloseGlobal) {
       const categoria = desgloseGlobal.dataset.personasDesgloseCategoria;
@@ -5336,6 +5313,18 @@
 
   document.addEventListener('change', (evento) => {
     const objetivo = evento.target;
+
+    if (objetivo.id === 'filtro-gastos-categoria') {
+      filtroCategoria = objetivo.value === 'todo' ? null : objetivo.value;
+      pintar();
+      return;
+    }
+
+    if (objetivo.id === 'filtro-gastos-medio') {
+      filtroMedio = objetivo.value === 'todo' ? null : objetivo.value;
+      pintar();
+      return;
+    }
 
     if (objetivo.id === 'gasto-incluirme') {
       borrador.incluirme = objetivo.checked;
