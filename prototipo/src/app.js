@@ -2280,74 +2280,6 @@
       .join('');
   }
 
-  function totalesPorMesYCategoria(items, fechaDe, categoriaDe, montoDe) {
-    const porMes = new Map();
-    for (const item of items) {
-      const monto = montoDe(item);
-      if (!monto) continue;
-      const month = M.monthKeyOf(fechaDe(item), OFFSET);
-      const catId = categoriaDe(item) ?? 'sin-categoria';
-      if (!porMes.has(month)) porMes.set(month, new Map());
-      const cats = porMes.get(month);
-      cats.set(catId, (cats.get(catId) ?? 0) + monto);
-    }
-    return [...porMes.entries()]
-      .map(([month, catsMap]) => ({
-        month,
-        totalCents: [...catsMap.values()].reduce((s, v) => s + v, 0),
-        categorias: [...catsMap.entries()]
-          .map(([categoryId, totalCents]) => ({ categoryId, totalCents }))
-          .sort((a, b) => b.totalCents - a.totalCents),
-      }))
-      .sort((a, b) => b.month.localeCompare(a.month));
-  }
-
-  function resumenMesesConCategoriasPersona(grupos, lado) {
-    if (grupos.length === 0) return '';
-    return `
-      <div class="persona__por-mes">
-        <div class="persona__desglose-titulo">Por mes</div>
-        ${grupos
-          .map(
-            (grupo) => `
-          <div class="persona__mes-grupo">
-            <div class="persona__categoria-fila persona__categoria-fila--mes">
-              <span class="persona__mes-etiqueta">${escapar(nombreMes(grupo.month))}</span>
-              <span class="persona__categoria-monto cifra">${plata(grupo.totalCents)}</span>
-            </div>
-            ${
-              grupo.categorias.length > 0
-                ? `<div class="persona__por-categoria persona__por-categoria--anidada">
-                     ${grupo.categorias
-                       .map((cat) => {
-                         const activo =
-                           personaDetalleDesglose?.lado === lado &&
-                           personaDetalleDesglose.mes === grupo.month &&
-                           personaDetalleDesglose.categoria === cat.categoryId;
-                         return `
-                     <button type="button"
-                             class="persona__categoria-fila persona__categoria-fila--anidada persona__categoria-fila--clic"
-                             data-persona-desglose-categoria="${escapar(cat.categoryId)}"
-                             data-persona-desglose-mes="${escapar(grupo.month)}"
-                             data-persona-desglose-lado="${lado}"
-                             aria-pressed="${activo ? 'true' : 'false'}">
-                       <span class="persona__categoria-etiqueta">
-                         <i class="categoria__mecha" style="background:${colorCategoria(cat.categoryId)}"></i>
-                         ${escapar(nombreCategoria(cat.categoryId))}
-                       </span>
-                       <span class="persona__categoria-monto cifra">${plata(cat.totalCents)}</span>
-                     </button>`;
-                       })
-                       .join('')}
-                   </div>`
-                : ''
-            }
-          </div>`,
-          )
-          .join('')}
-      </div>`;
-  }
-
   function pistaDesglosePersona(lado) {
     if (!personaDetalleDesglose || personaDetalleDesglose.lado !== lado) return '';
     const mesEtiqueta = personaDetalleDesglose.mes
@@ -2442,19 +2374,6 @@
       (deuda) => deuda.amountCents,
     );
 
-    const porMesCobrar = totalesPorMesYCategoria(
-      itemsCobrarResumen,
-      (item) => item.occurredAt,
-      (item) => item.categoryId,
-      (item) => item.pendingCents || item.amountCents,
-    );
-    const porMesPagar = totalesPorMesYCategoria(
-      itemsPagarResumen,
-      (deuda) => deuda.occurredAt,
-      categoriaDeDeuda,
-      (deuda) => deuda.amountCents,
-    );
-
     const itemsCobrarLista = filtrarItemsDesglosePersona(
       itemsCobrarVisibles,
       'cobrar',
@@ -2505,7 +2424,6 @@
                ${botonCobrarTodo}
              </div>
              ${resumenCategoriasPlano(porCategoriaCobrarFlat, 'cobrar')}
-             ${filtradoMes ? resumenMesesConCategoriasPersona(porMesCobrar, 'cobrar') : ''}
              ${pistaDesglosePersona('cobrar')}
              <div class="persona__bloque-lista">
                ${
@@ -2541,7 +2459,6 @@
                ${botonPagarTodo}
              </div>
              ${resumenCategoriasPlano(porCategoriaPagarFlat, 'pagar')}
-             ${filtradoMes ? resumenMesesConCategoriasPersona(porMesPagar, 'pagar') : ''}
              ${pistaDesglosePersona('pagar')}
              <div class="persona__bloque-lista">
                ${

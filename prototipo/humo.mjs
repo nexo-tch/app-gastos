@@ -209,12 +209,9 @@ comprobar(
   doc.querySelector('.persona__por-categoria--flat') !== null,
 );
 comprobar(
-  'con Todos no muestra desglose por mes',
-  doc.querySelector('.persona__mes-grupo') === null,
-);
-comprobar(
-  'con Todos no anida categorías por mes',
-  doc.querySelector('.persona__por-categoria--anidada') === null,
+  'el detalle no repite desglose por mes',
+  doc.querySelector('.persona__mes-grupo') === null &&
+    doc.querySelector('.persona__por-categoria--anidada') === null,
 );
 const categoriaDesglose = doc.querySelector('[data-persona-desglose-categoria]');
 comprobar('las categorías del desglose se pueden tocar', categoriaDesglose !== null);
@@ -235,6 +232,18 @@ comprobar(
   (detalleAna?.textContent.match(/Te debe/g) ?? []).length === 1,
 );
 comprobar('el detalle no muestra el correo en pantalla', !detalleAna?.textContent.includes('@'));
+
+clic('[data-volver-personas]');
+clic(`[data-filtro-personas-mes="${mesPrueba}"]`);
+clic(`[data-ver-persona="${ana.id}"]`);
+comprobar(
+  'con un mes filtrado tampoco repite desglose por mes',
+  doc.querySelector('.persona__mes-grupo') === null,
+);
+comprobar(
+  'con un mes filtrado sigue mostrando resumen por categoría',
+  doc.querySelector('.persona__por-categoria--flat') !== null,
+);
 
 comprobar('Ana todavía no tiene correo', !ana?.email);
 clic(`[data-editar-correo-persona="${ana.id}"]`);
