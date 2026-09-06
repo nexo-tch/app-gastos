@@ -463,6 +463,7 @@ comprobar('el tope por categoría se guarda', guardado().presupuestos[mesActual(
 /* ── 6a. Medios de pago personalizables ─────────────────────────── */
 
 comprobar('lista los medios de pago', texto('#lienzo').includes('Medios de pago'));
+comprobar('muestra el gasto del mes por medio', doc.querySelector('.medio__mes') !== null);
 const mediosAntes = guardado().cuentas.length;
 
 clic('[data-abrir="medio"]');

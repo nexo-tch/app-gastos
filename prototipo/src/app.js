@@ -1108,6 +1108,30 @@
       .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
   }
 
+  function resumenMediosDelMes(clave) {
+    const totales = new Map();
+    const conteos = new Map();
+    let totalMes = 0;
+
+    for (const gasto of gastosVivos()) {
+      if (gasto.status !== 'confirmed' || !gasto.accountId) continue;
+      if (M.monthKeyOf(gasto.occurredAt, OFFSET) !== clave) continue;
+      const cents = gasto.myShareCents;
+      totales.set(gasto.accountId, (totales.get(gasto.accountId) ?? 0) + cents);
+      conteos.set(gasto.accountId, (conteos.get(gasto.accountId) ?? 0) + 1);
+      totalMes += cents;
+    }
+
+    return { totales, conteos, totalMes };
+  }
+
+  function detalleMedioDelMes(gastado, movimientos, totalMes) {
+    if (movimientos === 0) return 'Sin movimientos este mes';
+    const parte = totalMes > 0 ? Math.round((gastado / totalMes) * 100) : 0;
+    const movLabel = movimientos === 1 ? '1 movimiento' : `${movimientos} movimientos`;
+    return parte > 0 ? `${parte}% del mes · ${movLabel}` : movLabel;
+  }
+
   function bloqueCategorias(resumen) {
     const filas = resumen.byCategory.filter((c) => c.spentCents > 0 || c.committedCents > 0 || c.limitCents);
 
@@ -1559,6 +1583,7 @@
   function vistaPresupuesto(resumen) {
     const presu = presupuestoDe(mes);
     const sumaTopes = Object.values(presu.limites ?? {}).reduce((s, v) => s + (v || 0), 0);
+    const { totales: gastoMedios, conteos: movMedios, totalMes: totalMediosMes } = resumenMediosDelMes(mes);
 
     const desfase =
       presu.totalCents > 0 && sumaTopes > 0
@@ -1602,22 +1627,37 @@
       <section class="bloque">
         <div class="bloque__cabeza">
           <h2>Medios de pago</h2>
+          <span class="rotulo">${escapar(nombreMes(mes))}</span>
           <button type="button" class="boton boton--marco boton--chico" data-abrir="medio">
             Nuevo medio
           </button>
         </div>
         <p class="pista">
           Tarjetas, billeteras y efectivo con el nombre que tú uses. Al registrar un gasto o una deuda
-          eliges cuál usaste.
+          eliges cuál usaste; aquí ves cuánto ha pasado por cada uno este mes (solo tu parte).
         </p>
         <div class="tarjeta">
           ${datos.cuentas
-            .map(
-              (medio) => `
+            .map((medio) => {
+              const gastado = gastoMedios.get(medio.id) ?? 0;
+              const movimientos = movMedios.get(medio.id) ?? 0;
+              const porcentaje = totalMediosMes > 0 ? Math.round((gastado / totalMediosMes) * 100) : 0;
+              return `
               <div class="medio">
                 <div class="medio__nombre">
                   <span>${escapar(medio.name)}</span>
                   <span class="medio__tipo">${escapar(nombreTipoMedio(medio.kind))}</span>
+                </div>
+                <div class="medio__mes">
+                  <span class="medio__gastado cifra">${plata(gastado)}</span>
+                  <span class="medio__detalle">${escapar(detalleMedioDelMes(gastado, movimientos, totalMediosMes))}</span>
+                  ${
+                    gastado > 0 && totalMediosMes > 0
+                      ? `<div class="medidor medio__medidor">
+                           <span class="medidor__relleno" style="width:${porcentaje}%"></span>
+                         </div>`
+                      : ''
+                  }
                 </div>
                 <div class="medio__acciones">
                   <button type="button" class="icono icono--mini" data-editar-medio="${medio.id}"
@@ -1625,8 +1665,8 @@
                   <button type="button" class="icono icono--mini" data-borrar-medio="${medio.id}"
                           aria-label="Quitar ${escapar(medio.name)}">✕</button>
                 </div>
-              </div>`,
-            )
+              </div>`;
+            })
             .join('')}
         </div>
       </section>
