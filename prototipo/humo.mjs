@@ -219,6 +219,12 @@ comprobar(
   guardado().gastos.some((g) => g.merchantRaw === 'Hamburguesa' && g.myShareCents === 2500000),
 );
 comprobar(
+  'la deuda guarda con qué pagaste',
+  guardado().gastos.some(
+    (g) => g.merchantRaw === 'Hamburguesa' && g.accountId === guardado().cuentas[0]?.id,
+  ),
+);
+comprobar(
   'con una deuda también ofrece pagar todo',
   doc.querySelector(`[data-pagar-todo="${ana.id}"]`) !== null,
 );
@@ -405,6 +411,32 @@ comprobar('el tope del mes se puede editar', doc.querySelector('[data-presupuest
 
 escribir('[data-tope="ropa"]', '200.000', 'change');
 comprobar('el tope por categoría se guarda', guardado().presupuestos[mesActual()].limites.ropa === 20000000);
+
+/* ── 6a. Medios de pago personalizables ─────────────────────────── */
+
+comprobar('lista los medios de pago', texto('#lienzo').includes('Medios de pago'));
+const mediosAntes = guardado().cuentas.length;
+
+clic('[data-abrir="medio"]');
+comprobar('el diálogo de medio se abre', doc.querySelector('#dialogo-medio').open === true);
+escribir('#medio-nombre', 'Visa Bancolombia');
+doc.querySelector('#forma-medio').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+comprobar('el medio nuevo se guarda', guardado().cuentas.length === mediosAntes + 1);
+comprobar(
+  'aparece en la lista de medios',
+  texto('#lienzo').includes('Visa Bancolombia'),
+);
+
+clic('[data-abrir="gasto"]');
+comprobar(
+  'el gasto ofrece el medio nuevo',
+  [...doc.querySelectorAll('#gasto-cuenta option')].some((o) => o.textContent.includes('Visa Bancolombia')),
+);
+doc.querySelector('#dialogo-gasto [data-cerrar]').dispatchEvent(
+  new window.MouseEvent('click', { bubbles: true }),
+);
 
 /* ── 6b. Crear, editar, quitar y restaurar categorías ───────────── */
 

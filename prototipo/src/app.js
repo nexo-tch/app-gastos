@@ -725,6 +725,29 @@
   const personaPorId = (idPer) => datos.personas.find((p) => p.id === idPer) ?? null;
   const cuentaPorId = (idCta) => datos.cuentas.find((c) => c.id === idCta) ?? null;
 
+  const ETIQUETAS_MEDIO = {
+    cash: 'Efectivo',
+    debit: 'Débito',
+    credit: 'Crédito',
+    wallet: 'Billetera',
+  };
+
+  const nombreTipoMedio = (tipo) => ETIQUETAS_MEDIO[tipo] ?? 'Otro';
+
+  const cuentaEnUso = (idCta) =>
+    datos.gastos.some((g) => !g.deletedAt && g.accountId === idCta);
+
+  function rellenarSelectorMedio(select, seleccionado, { incluirNuevo = false } = {}) {
+    if (!select) return;
+    const opciones = datos.cuentas.map(
+      (c) => `<option value="${c.id}">${escapar(c.name)}</option>`,
+    );
+    if (incluirNuevo) opciones.push('<option value="__nuevo__">+ Nuevo medio…</option>');
+    select.innerHTML = opciones.join('');
+    const valido = datos.cuentas.some((c) => c.id === seleccionado);
+    select.value = valido ? seleccionado : datos.cuentas[0]?.id ?? '';
+  }
+
   const nombreCategoria = (idCat) => categoriaPorId(idCat)?.name ?? 'Sin categoría';
 
   /**
@@ -1465,6 +1488,38 @@
 
       <section class="bloque">
         <div class="bloque__cabeza">
+          <h2>Medios de pago</h2>
+          <button type="button" class="boton boton--marco boton--chico" data-abrir="medio">
+            Nuevo medio
+          </button>
+        </div>
+        <p class="pista">
+          Tarjetas, billeteras y efectivo con el nombre que tú uses. Al registrar un gasto o una deuda
+          eliges cuál usaste.
+        </p>
+        <div class="tarjeta">
+          ${datos.cuentas
+            .map(
+              (medio) => `
+              <div class="medio">
+                <div class="medio__nombre">
+                  <span>${escapar(medio.name)}</span>
+                  <span class="medio__tipo">${escapar(nombreTipoMedio(medio.kind))}</span>
+                </div>
+                <div class="medio__acciones">
+                  <button type="button" class="icono icono--mini" data-editar-medio="${medio.id}"
+                          aria-label="Editar ${escapar(medio.name)}">✎</button>
+                  <button type="button" class="icono icono--mini" data-borrar-medio="${medio.id}"
+                          aria-label="Quitar ${escapar(medio.name)}">✕</button>
+                </div>
+              </div>`,
+            )
+            .join('')}
+        </div>
+      </section>
+
+      <section class="bloque">
+        <div class="bloque__cabeza">
           <h2>Categorías y topes</h2>
           <button type="button" class="boton boton--marco boton--chico" data-abrir="categoria">
             Nueva categoría
@@ -2139,10 +2194,9 @@
       : hoyDia();
 
     const selectorCuenta = document.getElementById('gasto-cuenta');
-    selectorCuenta.innerHTML = datos.cuentas
-      .map((c) => `<option value="${c.id}">${escapar(c.name)}</option>`)
-      .join('');
-    selectorCuenta.value = gastoExistente?.accountId ?? datos.cuentas[0]?.id ?? '';
+    rellenarSelectorMedio(selectorCuenta, gastoExistente?.accountId ?? datos.cuentas[0]?.id, {
+      incluirNuevo: true,
+    });
 
     document.getElementById('comercios-vistos').innerHTML = Array.from(
       new Set(gastosVivos().map((g) => g.merchantRaw).filter(Boolean)),
@@ -2410,6 +2464,50 @@
   const dialogoCategoria = document.getElementById('dialogo-categoria');
   let categoriaEditando = null;
   let colorElegido = PALETA[0];
+
+  /* ══ Diálogo de medio de pago ═══════════════════════════════════ */
+
+  const dialogoMedio = document.getElementById('dialogo-medio');
+  let medioEditando = null;
+  let medioSelectorTrasGuardar = null;
+
+  function abrirMedio(idMedio, selectorRetorno = null) {
+    const medio = idMedio ? cuentaPorId(idMedio) : null;
+    medioEditando = medio?.id ?? null;
+    medioSelectorTrasGuardar = selectorRetorno;
+
+    document.getElementById('titulo-medio').textContent = medio
+      ? 'Editar medio de pago'
+      : 'Nuevo medio de pago';
+    document.getElementById('medio-nombre').value = medio?.name ?? '';
+    document.getElementById('medio-tipo').value = medio?.kind ?? 'debit';
+    document.getElementById('medio-eliminar').hidden = !medio;
+
+    dialogoMedio.showModal();
+    setTimeout(() => document.getElementById('medio-nombre').focus(), 40);
+  }
+
+  function quitarMedio(idMedio) {
+    const medio = cuentaPorId(idMedio);
+    if (!medio) return;
+
+    if (datos.cuentas.length === 1) {
+      avisar('Necesitas al menos un medio de pago.');
+      return;
+    }
+
+    if (cuentaEnUso(idMedio)) {
+      avisar(`"${medio.name}" tiene gastos registrados. No se puede quitar.`);
+      return;
+    }
+
+    if (!confirm(`¿Quitar "${medio.name}"?`)) return;
+
+    mutar((d) => {
+      d.cuentas = d.cuentas.filter((c) => c.id !== idMedio);
+    });
+    avisar('Medio de pago quitado');
+  }
 
   /** Propone el primer color de la paleta que nadie esté usando. */
   function colorLibre() {
@@ -3004,14 +3102,25 @@
 
   function registrarDeudaConGasto(
     d,
-    { idDeuda, personId, personName, description, amountCents, day, categoryId, gastoDescription, settledAt },
+    {
+      idDeuda,
+      personId,
+      personName,
+      description,
+      amountCents,
+      day,
+      categoryId,
+      accountId,
+      gastoDescription,
+      settledAt,
+    },
   ) {
     const idGasto = `${idDeuda}${SUFIJO_GASTO_DEUDA}`;
     const etiqueta = description.trim() || 'Un gasto';
 
     const gasto = {
       id: idGasto,
-      accountId: null,
+      accountId: accountId ?? null,
       categoryId,
       status: 'confirmed',
       source: 'manual',
@@ -3206,6 +3315,11 @@
     document.getElementById('debo-descripcion').value = deuda?.description ?? '';
     document.getElementById('debo-monto').value = deuda ? textoDesdeCentavos(deuda.amountCents) : '';
     document.getElementById('debo-fecha').value = deuda ? diaDeIso(deuda.occurredAt) : hoyDia();
+    rellenarSelectorMedio(
+      document.getElementById('debo-cuenta'),
+      gasto?.accountId ?? datos.cuentas[0]?.id,
+      { incluirNuevo: true },
+    );
     pintarCategoriasDebo();
     dialogoDebo.showModal();
     setTimeout(() => document.getElementById('debo-descripcion').focus(), 40);
@@ -3230,6 +3344,7 @@
     const description = document.getElementById('debo-descripcion').value.trim();
     const amountCents = centavosDesdeTexto(document.getElementById('debo-monto').value);
     const day = document.getElementById('debo-fecha').value || hoyDia();
+    const accountId = document.getElementById('debo-cuenta').value || null;
 
     if (!persona) {
       avisar('Elige a quién le debes');
@@ -3245,6 +3360,10 @@
     }
     if (!categoriaDebo) {
       avisar('Elige en qué categoría lo cuentas');
+      return false;
+    }
+    if (!accountId || accountId === '__nuevo__') {
+      avisar('Elige con qué pagaste');
       return false;
     }
 
@@ -3267,6 +3386,7 @@
         amountCents,
         day,
         categoryId: categoriaDebo,
+        accountId,
         settledAt,
         gastoDescription: gastoLigado?.description,
       });
@@ -3320,6 +3440,10 @@
     const comercio = document.getElementById('gasto-comercio').value.trim();
     const fecha = document.getElementById('gasto-fecha').value || hoyDia();
     const cuenta = document.getElementById('gasto-cuenta').value || null;
+    if (cuenta === '__nuevo__') {
+      avisar('Elige un medio de pago o crea uno nuevo.');
+      return false;
+    }
     const editando = borrador.id;
     const repartosGuardados = [];
     const wrapAvisar = document.getElementById('gasto-avisar-wrap');
@@ -3680,6 +3804,7 @@
       if (abrir.dataset.abrir === 'gasto') abrirGasto(null);
       if (abrir.dataset.abrir === 'fijo') abrirFijo(null);
       if (abrir.dataset.abrir === 'categoria') abrirCategoria(null);
+      if (abrir.dataset.abrir === 'medio') abrirMedio(null);
       if (abrir.dataset.abrir === 'datos') {
         pintarCuenta();
         document.getElementById('dialogo-datos').showModal();
@@ -3920,6 +4045,18 @@
       return;
     }
 
+    const editarMedio = objetivo.closest('[data-editar-medio]');
+    if (editarMedio) {
+      abrirMedio(editarMedio.dataset.editarMedio);
+      return;
+    }
+
+    const borrarMedio = objetivo.closest('[data-borrar-medio]');
+    if (borrarMedio) {
+      quitarMedio(borrarMedio.dataset.borrarMedio);
+      return;
+    }
+
     const restaurarCategoria = objetivo.closest('[data-restaurar-categoria]');
     if (restaurarCategoria) {
       const idCat = restaurarCategoria.dataset.restaurarCategoria;
@@ -3942,7 +4079,18 @@
       if (!categoriaEditando) return;
       const idCat = categoriaEditando;
       dialogoCategoria.close();
+      categoriaEditando = null;
       quitarCategoria(idCat);
+      return;
+    }
+
+    if (objetivo.closest('#medio-eliminar')) {
+      if (!medioEditando) return;
+      const idMedio = medioEditando;
+      dialogoMedio.close();
+      medioEditando = null;
+      medioSelectorTrasGuardar = null;
+      quitarMedio(idMedio);
       return;
     }
 
@@ -4174,6 +4322,53 @@
 
     avisar(editando ? 'Categoría actualizada' : 'Categoría creada');
   });
+
+  document.getElementById('forma-medio').addEventListener('submit', (evento) => {
+    const nombre = document.getElementById('medio-nombre').value.trim();
+    const tipo = document.getElementById('medio-tipo').value;
+    if (!nombre) {
+      evento.preventDefault();
+      return;
+    }
+
+    const editando = medioEditando;
+    const repetido = datos.cuentas.some(
+      (c) => c.id !== editando && c.name.toLowerCase() === nombre.toLowerCase(),
+    );
+    if (repetido) {
+      evento.preventDefault();
+      avisar(`Ya tienes un medio llamado "${nombre}".`);
+      return;
+    }
+
+    let idNuevo = editando;
+    mutar((d) => {
+      if (editando) {
+        const medio = d.cuentas.find((c) => c.id === editando);
+        Object.assign(medio, { name: nombre, kind: tipo });
+      } else {
+        idNuevo = id();
+        d.cuentas.push({ id: idNuevo, name: nombre, kind: tipo });
+      }
+    });
+
+    if (medioSelectorTrasGuardar) {
+      rellenarSelectorMedio(document.getElementById(medioSelectorTrasGuardar), idNuevo, {
+        incluirNuevo: true,
+      });
+      medioSelectorTrasGuardar = null;
+    }
+
+    avisar(editando ? 'Medio actualizado' : 'Medio creado');
+  });
+
+  for (const idSelector of ['gasto-cuenta', 'debo-cuenta']) {
+    document.getElementById(idSelector)?.addEventListener('change', (evento) => {
+      if (evento.target.value !== '__nuevo__') return;
+      abrirMedio(null, idSelector);
+      rellenarSelectorMedio(evento.target, datos.cuentas[0]?.id, { incluirNuevo: true });
+    });
+  }
 
   document.getElementById('forma-fijo').addEventListener('submit', () => {
     const nombre = document.getElementById('fijo-nombre').value.trim();

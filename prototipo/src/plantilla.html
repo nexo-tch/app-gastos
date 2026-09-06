@@ -435,6 +435,11 @@
             <input class="entrada" id="debo-fecha" type="date" required />
           </label>
 
+          <label class="campo">
+            <span class="campo__etiqueta">Con qué pagaste</span>
+            <select class="entrada" id="debo-cuenta" required></select>
+          </label>
+
           <fieldset class="campo">
             <legend class="campo__etiqueta">En qué lo cuentas</legend>
             <div class="rejilla-categorias" id="debo-categorias"></div>
@@ -534,6 +539,46 @@
 
         <div class="hoja__pie">
           <button type="button" class="boton boton--peligro" id="categoria-eliminar" hidden>Eliminar</button>
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Cancelar</button>
+          <button type="submit" class="boton boton--solido">Guardar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Crear o editar un medio de pago -->
+    <dialog class="hoja hoja--angosta" id="dialogo-medio" aria-labelledby="titulo-medio">
+      <form method="dialog" class="hoja__forma" id="forma-medio">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-medio">Nuevo medio de pago</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="hoja__cuerpo">
+          <label class="campo">
+            <span class="campo__etiqueta">Nombre</span>
+            <input
+              class="entrada"
+              id="medio-nombre"
+              placeholder="Visa Bancolombia, Nequi, efectivo…"
+              maxlength="40"
+              required
+            />
+          </label>
+
+          <label class="campo">
+            <span class="campo__etiqueta">Tipo</span>
+            <select class="entrada" id="medio-tipo">
+              <option value="cash">Efectivo</option>
+              <option value="debit">Débito</option>
+              <option value="credit">Crédito</option>
+              <option value="wallet">Billetera</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="hoja__pie">
+          <button type="button" class="boton boton--peligro" id="medio-eliminar" hidden>Eliminar</button>
           <span class="hoja__espaciador"></span>
           <button type="button" class="boton boton--fantasma" data-cerrar>Cancelar</button>
           <button type="submit" class="boton boton--solido">Guardar</button>
