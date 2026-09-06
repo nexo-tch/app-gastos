@@ -1586,7 +1586,7 @@
             </div>
             ${
               filtrando
-                ? `<button type="button" class="boton boton--fantasma boton--chico" data-quitar-filtros-gastos>
+                ? `<button type="button" class="boton boton--filtro boton--chico" data-quitar-filtros-gastos>
                      Ver todos
                    </button>`
                 : ''
@@ -2250,7 +2250,7 @@
               ${escapar(nombreCategoria(categoria))}
               · ${etiquetaLado}
               ${filtroPersonasMes ? ` · ${escapar(nombreMes(filtroPersonasMes))}` : ''}
-              <button type="button" class="boton boton--fantasma boton--chico" data-quitar-desglose-personas-general>
+              <button type="button" class="boton boton--filtro boton--chico" data-quitar-desglose-personas-general>
                 Ver todos
               </button>
             </p>`;
@@ -2291,7 +2291,7 @@
               ${escapar(nombreCategoria(personaDetalleDesglose.categoria))}${
                 mesEtiqueta ? ` · ${escapar(mesEtiqueta)}` : ''
               }
-              <button type="button" class="boton boton--fantasma boton--chico" data-quitar-desglose-persona>
+              <button type="button" class="boton boton--filtro boton--chico" data-quitar-desglose-persona>
                 Ver todos
               </button>
             </p>`;

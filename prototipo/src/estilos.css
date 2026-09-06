@@ -248,6 +248,20 @@ button {
   font-size: 12.5px;
 }
 
+.boton--filtro {
+  border: 1px solid var(--borde-fuerte);
+  background: var(--superficie);
+  box-shadow: 0 1px 3px rgba(27, 24, 21, 0.1);
+  color: var(--marca);
+  font-weight: 600;
+}
+
+.boton--filtro:hover {
+  border-color: var(--marca);
+  background: var(--marca-tenue);
+  color: var(--marca-viva);
+}
+
 .icono {
   display: grid;
   place-items: center;
