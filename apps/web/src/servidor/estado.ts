@@ -441,7 +441,7 @@ export async function leerEstado(usuarioId: string): Promise<Estado> {
     pasivos: pasivos.map((p) => ({
       id: p.id,
       name: p.nombre,
-      kind: p.tipo,
+      kind: p.tipo as Pasivo['kind'],
       balanceCents: p.saldo,
       limitCents: p.cupo,
       accountId: p.cuentaId,
@@ -451,7 +451,7 @@ export async function leerEstado(usuarioId: string): Promise<Estado> {
     pasivoMovimientos: pasivoMovimientos.map((m) => ({
       id: m.id,
       liabilityId: m.pasivoId,
-      kind: m.tipo,
+      kind: m.tipo as PasivoMovimiento['kind'],
       paymentCents: m.monto,
       balanceAfterCents: m.saldoDespues,
       note: m.nota,
