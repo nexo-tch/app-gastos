@@ -3,6 +3,8 @@
  * recorre los caminos que se usan todos los días. No reemplaza probarlo a mano,
  * pero atrapa el error que dejaría la pantalla en blanco.
  */
+process.env.TZ = 'America/Bogota';
+
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -130,6 +132,30 @@ comprobar('queda un reparto nuevo', guardado().repartos.length > datos.repartos.
 const ultimo = guardado().gastos.at(-1);
 comprobar('guarda el total completo', ultimo.amountTotalCents === 6000000, String(ultimo.amountTotalCents));
 comprobar('guarda solo mi parte aparte', ultimo.myShareCents === 3000000, String(ultimo.myShareCents));
+
+/* ── 4b. La fecha mostrada coincide con la elegida ─────────────── */
+
+const mesPrueba = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+const diaPrueba = `${mesPrueba}-01`;
+
+clic('[data-abrir="gasto"]');
+escribir('#gasto-fecha', diaPrueba);
+escribir('#gasto-monto', '15000');
+clic('[data-categoria="mercado"]');
+escribir('#gasto-comercio', 'Prueba fecha');
+doc.querySelector('#forma-gasto').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+
+clic('.pestana[data-vista="gastos"]');
+const gastosMes = texto('#lienzo');
+comprobar(
+  'la fecha del gasto no retrocede un día',
+  gastosMes.includes('Prueba fecha') && gastosMes.includes('1 de') && !/\b31 de\b/.test(gastosMes),
+  gastosMes.slice(0, 120),
+);
+
+clic('.pestana[data-vista="resumen"]');
 
 /* ── 5. Cobrar: un abono se reparte del más viejo al más nuevo ──── */
 

@@ -622,6 +622,7 @@
         weekday: 'long',
         day: 'numeric',
         month: 'short',
+        timeZone: 'UTC',
       }).format(fecha),
     );
   };
@@ -631,7 +632,9 @@
     if (dia === hoyDia()) return 'hoy';
     const [a, m, d] = dia.split('-').map(Number);
     const fecha = new Date(Date.UTC(a, m - 1, d));
-    return new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short' }).format(fecha);
+    return new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(
+      fecha,
+    );
   };
 
   const iniciales = (nombre) =>
