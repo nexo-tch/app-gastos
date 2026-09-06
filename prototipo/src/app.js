@@ -806,13 +806,16 @@
 
   function rellenarSelectorMedio(select, seleccionado, { incluirNuevo = false } = {}) {
     if (!select) return;
-    const opciones = datos.cuentas.map(
-      (c) => `<option value="${c.id}">${escapar(c.name)}</option>`,
-    );
+    const valido = seleccionado && datos.cuentas.some((c) => c.id === seleccionado);
+    const opciones = [
+      `<option value="" disabled ${valido ? '' : 'selected'} hidden>Elige un medio…</option>`,
+      ...datos.cuentas.map(
+        (c) => `<option value="${c.id}">${escapar(c.name)}</option>`,
+      ),
+    ];
     if (incluirNuevo) opciones.push('<option value="__nuevo__">+ Nuevo medio…</option>');
     select.innerHTML = opciones.join('');
-    const valido = datos.cuentas.some((c) => c.id === seleccionado);
-    select.value = valido ? seleccionado : datos.cuentas[0]?.id ?? '';
+    select.value = valido ? seleccionado : '';
   }
 
   const nombreCategoria = (idCat) => categoriaPorId(idCat)?.name ?? 'Sin categoría';
@@ -2871,7 +2874,7 @@
       : hoyDia();
 
     const selectorCuenta = document.getElementById('gasto-cuenta');
-    rellenarSelectorMedio(selectorCuenta, gastoExistente?.accountId ?? datos.cuentas[0]?.id, {
+    rellenarSelectorMedio(selectorCuenta, gastoExistente?.accountId ?? null, {
       incluirNuevo: true,
     });
 
@@ -4125,7 +4128,7 @@
     document.getElementById('debo-fecha').value = deuda ? diaDeIso(deuda.occurredAt) : hoyDia();
     rellenarSelectorMedio(
       document.getElementById('debo-cuenta'),
-      gasto?.accountId ?? datos.cuentas[0]?.id,
+      gasto?.accountId ?? null,
       { incluirNuevo: true },
     );
     pintarCategoriasDebo();
@@ -4248,8 +4251,8 @@
     const comercio = document.getElementById('gasto-comercio').value.trim();
     const fecha = document.getElementById('gasto-fecha').value || hoyDia();
     const cuenta = document.getElementById('gasto-cuenta').value || null;
-    if (cuenta === '__nuevo__') {
-      avisar('Elige un medio de pago o crea uno nuevo.');
+    if (!cuenta || cuenta === '__nuevo__') {
+      avisar('Elige con qué pagaste.');
       return false;
     }
     const editando = borrador.id;
@@ -5294,7 +5297,7 @@
     document.getElementById(idSelector)?.addEventListener('change', (evento) => {
       if (evento.target.value !== '__nuevo__') return;
       abrirMedio(null, idSelector);
-      rellenarSelectorMedio(evento.target, datos.cuentas[0]?.id, { incluirNuevo: true });
+      rellenarSelectorMedio(evento.target, null, { incluirNuevo: true });
     });
   }
 

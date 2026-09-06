@@ -74,6 +74,12 @@ const escribir = (selector, valor, tipo = 'input') => {
   nodo.dispatchEvent(new window.Event(tipo, { bubbles: true }));
 };
 
+const elegirMedio = (selector, idMedio) => {
+  const medio = idMedio ?? guardado().cuentas[0]?.id;
+  if (!medio) throw new Error('No hay medios de pago');
+  escribir(selector, medio, 'change');
+};
+
 const texto = (selector) => doc.querySelector(selector)?.textContent.replace(/\s+/g, ' ').trim() ?? '';
 
 const pruebas = [];
@@ -133,10 +139,12 @@ comprobar('mi parte es menor que el total registrado', miParte < totalRegistrado
 
 clic('[data-abrir="gasto"]');
 comprobar('el diálogo de gasto se abre', doc.querySelector('#dialogo-gasto').open === true);
+comprobar('el gasto no preselecciona un medio', doc.getElementById('gasto-cuenta').value === '');
 
 escribir('#gasto-monto', '60000');
 clic('[data-categoria="mercado"]');
 escribir('#gasto-comercio', 'Carulla');
+elegirMedio('#gasto-cuenta');
 
 const fichasPersona = doc.querySelectorAll('#gasto-personas [data-persona]');
 comprobar('las personas aparecen como fichas', fichasPersona.length === 2);
@@ -170,6 +178,7 @@ escribir('#gasto-fecha', diaPrueba);
 escribir('#gasto-monto', '15000');
 clic('[data-categoria="mercado"]');
 escribir('#gasto-comercio', 'Prueba fecha');
+elegirMedio('#gasto-cuenta');
 doc.querySelector('#forma-gasto').dispatchEvent(
   new window.Event('submit', { bubbles: true, cancelable: true }),
 );
@@ -281,6 +290,7 @@ comprobar('el diálogo de deuda manual se abre', doc.querySelector('#dialogo-deb
 
 doc.getElementById('debo-descripcion').value = 'Hamburguesa';
 escribir('#debo-monto', '25000');
+elegirMedio('#debo-cuenta');
 doc.querySelector('#forma-debo').dispatchEvent(
   new window.Event('submit', { bubbles: true, cancelable: true }),
 );
@@ -307,6 +317,7 @@ comprobar(
 clic(`[data-debo-persona="${ana.id}"]`);
 doc.getElementById('debo-descripcion').value = 'Pizza';
 escribir('#debo-monto', '15000');
+elegirMedio('#debo-cuenta');
 doc.querySelector('#forma-debo').dispatchEvent(
   new window.Event('submit', { bubbles: true, cancelable: true }),
 );
@@ -449,6 +460,7 @@ clic('[data-abrir="gasto"]');
 escribir('#gasto-monto', '40000');
 clic('[data-categoria="mercado"]');
 escribir('#gasto-comercio', 'D1');
+elegirMedio('#gasto-cuenta');
 doc.querySelectorAll('#gasto-personas [data-persona]')[0].dispatchEvent(
   new window.MouseEvent('click', { bubbles: true }),
 );
