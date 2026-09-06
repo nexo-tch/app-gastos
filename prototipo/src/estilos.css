@@ -1458,6 +1458,51 @@ button.categoria.categoria--clic:focus-visible {
   margin: 0 0 8px;
 }
 
+.personas-resumen-global {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.personas-gastos-global {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.personas-gasto-global {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--borde);
+}
+
+.personas-gasto-global:first-child {
+  border-top: 0;
+}
+
+.personas-gasto-global__persona {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--texto-2);
+}
+
+.avatar--mini {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+}
+
+.persona__por-categoria--flat {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
 .persona__desglose-titulo {
   font-size: 11px;
   font-weight: 600;

@@ -182,9 +182,21 @@ comprobar('Personas muestra tablero lite', doc.getElementById('tablero').dataset
 comprobar('Personas sigue mostrando lo que queda', texto('#tablero').includes('Te queda para el mes'));
 comprobar('la lista de personas es compacta', doc.querySelector('.persona-fila') !== null);
 comprobar(
-  'el desglose por categoría no está en la lista',
-  doc.querySelector('.persona__por-categoria') === null,
+  'la lista de personas no incluye desglose individual',
+  doc.querySelector('.persona-fila .persona__por-categoria') === null,
 );
+comprobar('Personas muestra resumen por categoría', doc.querySelector('.personas-resumen-global') !== null);
+comprobar(
+  'el resumen general de categorías es clicable',
+  doc.querySelector('[data-personas-desglose-categoria]') !== null,
+);
+clic('[data-personas-desglose-categoria]');
+comprobar(
+  'al tocar una categoría general muestra los gastos',
+  doc.querySelector('.personas-gastos-global') !== null,
+);
+comprobar('ofrece volver a la lista de personas', doc.querySelector('[data-quitar-desglose-personas-general]') !== null);
+clic('[data-quitar-desglose-personas-general]');
 
 const ana = guardado().personas.find((p) => p.name === 'Ana');
 clic(`[data-ver-persona="${ana.id}"]`);
@@ -193,6 +205,10 @@ comprobar('el detalle no muestra filtro de categoría', doc.getElementById('filt
 comprobar(
   'te debe desglosado por categoría dentro de cada mes',
   doc.querySelector('.persona__por-categoria--anidada') !== null,
+);
+comprobar(
+  'el detalle muestra resumen plano por categoría',
+  doc.querySelector('.persona__por-categoria--flat') !== null,
 );
 comprobar('te debe desglosado por mes en el detalle', doc.querySelector('.persona__mes-grupo') !== null);
 const categoriaDesglose = doc.querySelector('[data-persona-desglose-categoria]');
