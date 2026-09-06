@@ -2719,6 +2719,61 @@
 
   /* ══ Pintado general ═════════════════════════════════════════════ */
 
+  const VISTAS = new Set(['resumen', 'gastos', 'presupuesto', 'personas', 'pasivos', 'fijos']);
+
+  const hashEsCompartidoOCuenta = () => /^#(?:compartido|cuenta)=/.test(location.hash);
+
+  const mesNavValido = (clave) => typeof clave === 'string' && /^\d{4}-\d{2}$/.test(clave);
+
+  function leerNavDesdeHash() {
+    if (hashEsCompartidoOCuenta()) return null;
+    const hash = location.hash;
+    if (!hash.startsWith('#nav')) return null;
+    const indice = hash.indexOf('?');
+    const params = new URLSearchParams(indice >= 0 ? hash.slice(indice + 1) : '');
+    const vistaLeida = params.get('v');
+    if (!vistaLeida || !VISTAS.has(vistaLeida)) return null;
+    return {
+      vista: vistaLeida,
+      mes: params.get('m'),
+      personaDetalle: params.get('p'),
+      pasivoDetalle: params.get('pas'),
+      filtroPersonasMes: params.get('pm'),
+      filtroCategoria: params.get('fc'),
+      filtroMedio: params.get('fm'),
+    };
+  }
+
+  function aplicarNav(nav) {
+    vista = nav.vista;
+    if (mesNavValido(nav.mes)) mes = nav.mes;
+    personaDetalle =
+      nav.personaDetalle && personaPorId(nav.personaDetalle) ? nav.personaDetalle : null;
+    pasivoDetalle = nav.pasivoDetalle && pasivoPorId(nav.pasivoDetalle) ? nav.pasivoDetalle : null;
+    filtroPersonasMes = mesNavValido(nav.filtroPersonasMes) ? nav.filtroPersonasMes : null;
+    filtroCategoria =
+      nav.filtroCategoria && categoriaPorId(nav.filtroCategoria) ? nav.filtroCategoria : null;
+    filtroMedio = nav.filtroMedio && cuentaPorId(nav.filtroMedio) ? nav.filtroMedio : null;
+    personaDetalleDesglose = null;
+  }
+
+  function guardarNavEnHash() {
+    if (hashEsCompartidoOCuenta()) return;
+    const params = new URLSearchParams();
+    params.set('v', vista);
+    const mesActual = M.monthKeyOf(new Date(), OFFSET);
+    if (mes !== mesActual) params.set('m', mes);
+    if (personaDetalle) params.set('p', personaDetalle);
+    if (pasivoDetalle) params.set('pas', pasivoDetalle);
+    if (filtroPersonasMes) params.set('pm', filtroPersonasMes);
+    if (filtroCategoria) params.set('fc', filtroCategoria);
+    if (filtroMedio) params.set('fm', filtroMedio);
+    const destino = `#nav?${params.toString()}`;
+    if (location.hash !== destino) {
+      history.replaceState(null, '', location.pathname + location.search + destino);
+    }
+  }
+
   function pintar() {
     asegurarInstancias(mes);
 
@@ -2745,6 +2800,7 @@
     else if (vista === 'fijos') lienzo.innerHTML = vistaFijos();
 
     pintarBadgeNotificaciones();
+    guardarNavEnHash();
   }
 
   /* ══ Diálogo de gasto ════════════════════════════════════════════ */
@@ -5360,6 +5416,14 @@
 
   /* ══ Arranque ════════════════════════════════════════════════════ */
 
+  addEventListener('hashchange', () => {
+    if (hashEsCompartidoOCuenta()) return;
+    const nav = leerNavDesdeHash();
+    if (!nav) return;
+    aplicarNav(nav);
+    pintar();
+  });
+
   // Cuando el servidor manda su version de los datos, se cambia el estado
   // entero y se vuelve a pintar. Pasa al abrir y cuando hay un conflicto.
   almacen.escuchar((estado) => {
@@ -5369,6 +5433,8 @@
 
   // Se pinta ya con lo que hay en el navegador y despues se contrasta con la
   // cuenta: abrir la app tiene que ser instantaneo, con o sin senal.
+  const navInicial = leerNavDesdeHash();
+  if (navInicial) aplicarNav(navInicial);
   pintar();
   almacen.estrenar(datos);
 

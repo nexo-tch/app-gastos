@@ -168,10 +168,12 @@ comprobar(
 );
 
 clic('.pestana[data-vista="resumen"]');
+comprobar('cambiar de pestaña actualiza la URL', window.location.hash.includes('v=resumen'));
 
 /* ── 5. Cobrar: un abono se reparte del más viejo al más nuevo ──── */
 
 clic('.pestana[data-vista="personas"]');
+comprobar('Personas queda en la URL', window.location.hash.includes('v=personas'));
 comprobar('la vista de personas lista a Ana', texto('#lienzo').includes('Ana'));
 comprobar('la lista no muestra filtros de mes', doc.querySelector('.personas-filtros') === null);
 comprobar('la lista no muestra resumen por categoría', doc.querySelector('.personas-resumen-global') === null);
@@ -186,6 +188,7 @@ comprobar(
 
 const ana = guardado().personas.find((p) => p.name === 'Ana');
 clic(`[data-ver-persona="${ana.id}"]`);
+comprobar('el detalle de persona queda en la URL', window.location.hash.includes(`p=${ana.id}`));
 comprobar('el detalle ofrece filtros de mes', doc.querySelector('.personas-filtros') !== null);
 comprobar('el detalle de persona mantiene tablero lite', doc.getElementById('tablero').dataset.modo === 'lite');
 comprobar('el detalle no muestra filtro de categoría', doc.getElementById('filtro-personas-categoria') === null);
