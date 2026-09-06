@@ -304,6 +304,10 @@ export const pasivoMovimientos = pgTable(
     tipo: text('tipo').notNull(),
     /** Monto del abono cuando tipo es `payment`. */
     monto: integer('monto'),
+    /** Parte del abono que redujo capital (créditos). */
+    capital: integer('capital'),
+    /** Parte del abono que fue a intereses (créditos). */
+    interes: integer('interes'),
     saldoDespues: integer('saldo_despues').notNull(),
     nota: text('nota'),
     creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),

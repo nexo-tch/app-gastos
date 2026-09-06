@@ -815,6 +815,48 @@ comprobar(
   texto('#lienzo').includes('COP') && texto('#lienzo').includes('USD'),
 );
 
+clic('[data-abrir="pasivo"]');
+doc.getElementById('pasivo-tipo').value = 'loan';
+doc.getElementById('pasivo-nombre').value = 'Crédito hipoteca';
+doc.getElementById('pasivo-saldo').value = '10000000';
+doc.getElementById('forma-pasivo').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+
+const idCredito = guardado().pasivos.find((p) => p.name === 'Crédito hipoteca')?.id;
+clic(`[data-abonar-pasivo="${idCredito}"]`);
+comprobar(
+  'crédito muestra desglose capital/intereses',
+  doc.getElementById('pasivo-mov-desglose').hidden === false,
+);
+
+doc.getElementById('pasivo-mov-monto').value = '850000';
+doc.getElementById('pasivo-mov-capital').value = '620000';
+doc.getElementById('forma-pasivo-mov').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+comprobar(
+  'abono de crédito solo reduce capital',
+  guardado().pasivos.find((p) => p.name === 'Crédito hipoteca')?.balanceCents === 9_380_000_00,
+);
+const movPagoCredito = guardado().pasivoMovimientos.find(
+  (m) => m.liabilityId === idCredito && m.kind === 'payment',
+);
+comprobar(
+  'guarda capital e intereses del abono',
+  movPagoCredito?.principalCents === 620_000_00 && movPagoCredito?.interestCents === 230_000_00,
+);
+
+clic(`[data-ver-pasivo="${idCredito}"]`);
+comprobar(
+  'historial muestra desglose capital/intereses',
+  texto('#lienzo').includes('capital') && texto('#lienzo').includes('intereses'),
+);
+comprobar(
+  'detalle muestra intereses pagados en total',
+  texto('#lienzo').includes('Intereses pagados en total'),
+);
+
 clic('.pestana[data-vista="resumen"]');
 comprobar('vuelve a mostrar el tablero', doc.getElementById('tablero').hidden === false);
 

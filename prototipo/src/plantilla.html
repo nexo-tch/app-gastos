@@ -752,6 +752,23 @@
             </div>
           </label>
 
+          <div id="pasivo-mov-desglose" hidden>
+            <label class="campo campo--monto">
+              <span class="campo__etiqueta">Cuánto fue a capital</span>
+              <div class="monto">
+                <span class="monto__signo" id="pasivo-mov-capital-signo" aria-hidden="true">$</span>
+                <input
+                  class="monto__entrada"
+                  id="pasivo-mov-capital"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  placeholder="0"
+                />
+              </div>
+            </label>
+            <p class="pista" id="pasivo-mov-interes-pista"></p>
+          </div>
+
           <label class="campo">
             <span class="campo__etiqueta">Nota (opcional)</span>
             <input class="entrada" id="pasivo-mov-nota" placeholder="Pago de marzo, extracto del banco…" />

@@ -90,4 +90,11 @@ export const MIGRACIONES: Migracion[] = [
     nombre: "0007_pasivos_moneda",
     sentencias: ['ALTER TABLE "pasivos" ADD COLUMN "moneda" text DEFAULT \'COP\' NOT NULL;'],
   },
+  {
+    nombre: "0008_pasivo_mov_desglose",
+    sentencias: [
+      'ALTER TABLE "pasivo_movimientos" ADD COLUMN "capital" integer;',
+      'ALTER TABLE "pasivo_movimientos" ADD COLUMN "interes" integer;',
+    ],
+  },
 ];

@@ -820,6 +820,57 @@
     return totales.cop > 0 || totales.usd > 0;
   }
 
+  function pasivoUsaDesgloseAbono(pasivo) {
+    return pasivo?.kind === 'loan';
+  }
+
+  function actualizarPistaInteresPasivo(pasivoArg) {
+    const pista = document.getElementById('pasivo-mov-interes-pista');
+    if (!pista) return;
+    const pasivo =
+      pasivoArg && pasivoArg.id
+        ? pasivoArg
+        : pasivoPorId(document.getElementById('pasivo-mov-id').value);
+    if (!pasivo) return;
+    const total = centavosDesdeTexto(document.getElementById('pasivo-mov-monto').value);
+    const capital = centavosDesdeTexto(document.getElementById('pasivo-mov-capital').value);
+    if (total <= 0 || capital <= 0) {
+      pista.textContent = 'Según tu extracto: cuánto del pago redujo la deuda.';
+      return;
+    }
+    if (capital > total) {
+      pista.textContent = 'El capital no puede ser mayor al total pagado.';
+      return;
+    }
+    const interes = total - capital;
+    pista.textContent =
+      interes > 0
+        ? `Intereses: ${plataPasivo(pasivo, interes)} · Capital: ${plataPasivo(pasivo, capital)}`
+        : `Todo el pago fue a capital.`;
+  }
+
+  function totalInteresesPasivo(idPasivo) {
+    return movimientosDePasivo(idPasivo)
+      .filter((m) => m.kind === 'payment')
+      .reduce((s, m) => s + (m.interestCents ?? 0), 0);
+  }
+
+  function detalleMovimientoPasivo(pasivo, mov) {
+    if (mov.kind === 'payment' && mov.paymentCents) {
+      const queda = plataPasivo(pasivo, mov.balanceAfterCents);
+      if (
+        pasivoUsaDesgloseAbono(pasivo) &&
+        mov.principalCents != null &&
+        (mov.interestCents ?? 0) >= 0
+      ) {
+        const interes = mov.interestCents ?? mov.paymentCents - mov.principalCents;
+        return `−${plataPasivo(pasivo, mov.paymentCents)} (${plataPasivo(pasivo, mov.principalCents)} capital · ${plataPasivo(pasivo, interes)} intereses) · queda ${queda}`;
+      }
+      return `−${plataPasivo(pasivo, mov.paymentCents)} · queda ${queda}`;
+    }
+    return `Saldo ${plataPasivo(pasivo, mov.balanceAfterCents)}`;
+  }
+
   const movimientosDePasivo = (idPasivo) =>
     datos.pasivoMovimientos
       .filter((m) => m.liabilityId === idPasivo)
@@ -2696,6 +2747,7 @@
     }
 
     const movimientos = movimientosDePasivo(idPasivo);
+    const interesesPagados = totalInteresesPasivo(idPasivo);
 
     return `
       <section class="bloque">
@@ -2708,6 +2760,11 @@
           <b class="cifra">${plataPasivo(pasivo)}</b>
           ${pasivo.notes ? ` · ${escapar(pasivo.notes)}` : ''}
         </p>
+        ${
+          pasivoUsaDesgloseAbono(pasivo) && interesesPagados > 0
+            ? `<p class="pista">Intereses pagados en total: <b class="cifra">${plataPasivo(pasivo, interesesPagados)}</b></p>`
+            : ''
+        }
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
           <button type="button" class="boton boton--marco boton--chico" data-abonar-pasivo="${pasivo.id}">
             Registrar abono
@@ -2725,10 +2782,7 @@
             : `<div class="lista">
                  ${movimientos
                    .map((mov) => {
-                     const detalle =
-                       mov.kind === 'payment' && mov.paymentCents
-                         ? `−${plataPasivo(pasivo, mov.paymentCents)} · queda ${plataPasivo(pasivo, mov.balanceAfterCents)}`
-                         : `Saldo ${plataPasivo(pasivo, mov.balanceAfterCents)}`;
+                     const detalle = detalleMovimientoPasivo(pasivo, mov);
                      return `
                        <div class="renglon">
                          <div class="renglon__cuerpo">
@@ -3259,7 +3313,9 @@
   }
 
   function actualizarUiMonedaPasivoMov(moneda) {
-    document.getElementById('pasivo-mov-signo').textContent = signoMonedaPasivo(moneda);
+    const signo = signoMonedaPasivo(moneda);
+    document.getElementById('pasivo-mov-signo').textContent = signo;
+    document.getElementById('pasivo-mov-capital-signo').textContent = signo;
   }
 
   function rellenarSelectoresPasivo(pasivo = null) {
@@ -3320,12 +3376,20 @@
       ? 'Cuánto abonaste'
       : 'Saldo según el banco';
     document.getElementById('pasivo-mov-pista').innerHTML = esAbono
-      ? `Saldo actual de <b>${escapar(pasivo.name)}</b>: <span class="cifra">${plataPasivo(pasivo)}</span>`
+      ? pasivoUsaDesgloseAbono(pasivo)
+        ? `Saldo actual de <b>${escapar(pasivo.name)}</b>: <span class="cifra">${plataPasivo(pasivo)}</span>. Del total pagado, indica cuánto fue a capital según tu extracto.`
+        : `Saldo actual de <b>${escapar(pasivo.name)}</b>: <span class="cifra">${plataPasivo(pasivo)}</span>`
       : `Reemplaza el saldo de <b>${escapar(pasivo.name)}</b> (hoy ${plataPasivo(pasivo)}).`;
     actualizarUiMonedaPasivoMov(monedaPasivo(pasivo));
     document.getElementById('pasivo-mov-monto').value = esAbono
       ? ''
       : textoDesdeCentavos(pasivo.balanceCents);
+    const desglose = esAbono && pasivoUsaDesgloseAbono(pasivo);
+    document.getElementById('pasivo-mov-desglose').hidden = !desglose;
+    document.getElementById('pasivo-mov-capital').value = '';
+    document.getElementById('pasivo-mov-capital').required = desglose;
+    if (desglose) actualizarPistaInteresPasivo(pasivo);
+    else document.getElementById('pasivo-mov-interes-pista').textContent = '';
 
     dialogoPasivoMov.showModal();
     setTimeout(() => document.getElementById('pasivo-mov-monto').focus(), 40);
@@ -3349,30 +3413,48 @@
     const modo = document.getElementById('pasivo-mov-modo').value;
     const centavos = centavosDesdeTexto(document.getElementById('pasivo-mov-monto').value);
     const nota = document.getElementById('pasivo-mov-nota').value.trim() || null;
+    const pasivo = pasivoPorId(idPasivo);
 
     if (centavos <= 0) {
       avisar('Ponle un monto');
       return false;
     }
 
+    let principal = centavos;
+    let interes = 0;
+    if (modo === 'payment' && pasivo && pasivoUsaDesgloseAbono(pasivo)) {
+      principal = centavosDesdeTexto(document.getElementById('pasivo-mov-capital').value);
+      if (principal <= 0) {
+        avisar('Indica cuánto del pago fue a capital');
+        return false;
+      }
+      if (principal > centavos) {
+        avisar('El capital no puede ser mayor al total pagado');
+        return false;
+      }
+      interes = centavos - principal;
+    }
+
     mutar((d) => {
-      const pasivo = d.pasivos.find((p) => p.id === idPasivo);
-      if (!pasivo) return;
+      const pasivoMut = d.pasivos.find((p) => p.id === idPasivo);
+      if (!pasivoMut) return;
 
       if (modo === 'payment') {
-        const nuevoSaldo = Math.max(0, pasivo.balanceCents - centavos);
-        pasivo.balanceCents = nuevoSaldo;
+        const nuevoSaldo = Math.max(0, pasivoMut.balanceCents - principal);
+        pasivoMut.balanceCents = nuevoSaldo;
         d.pasivoMovimientos.push({
           id: id(),
           liabilityId: idPasivo,
           kind: 'payment',
           paymentCents: centavos,
+          principalCents: pasivoUsaDesgloseAbono(pasivoMut) ? principal : centavos,
+          interestCents: pasivoUsaDesgloseAbono(pasivoMut) ? interes : null,
           balanceAfterCents: nuevoSaldo,
           note: nota,
           createdAt: ahora(),
         });
       } else {
-        pasivo.balanceCents = centavos;
+        pasivoMut.balanceCents = centavos;
         d.pasivoMovimientos.push({
           id: id(),
           liabilityId: idPasivo,
@@ -5530,6 +5612,9 @@
   document.getElementById('forma-pasivo-mov').addEventListener('submit', (evento) => {
     if (!guardarPasivoMovimiento()) evento.preventDefault();
   });
+
+  document.getElementById('pasivo-mov-monto').addEventListener('input', actualizarPistaInteresPasivo);
+  document.getElementById('pasivo-mov-capital').addEventListener('input', actualizarPistaInteresPasivo);
 
   document.getElementById('forma-debo').addEventListener('submit', (evento) => {
     evento.preventDefault();
