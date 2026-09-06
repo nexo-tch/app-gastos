@@ -495,6 +495,60 @@ comprobar(
   'cobrar todo quita el botón masivo',
   doc.querySelector(`[data-cobrar-todo="${ana.id}"]`) === null,
 );
+comprobar(
+  'con el mes saldado sigue mostrando resumen por categoría',
+  doc.querySelector('.persona__por-categoria--flat') !== null,
+);
+comprobar(
+  'con el mes saldado la lista sigue visible',
+  doc.querySelectorAll('.persona__bloque--cobrar .deuda--saldada').length > 0,
+);
+
+const [anioPrueba, mesNumPrueba] = mesPrueba.split('-').map(Number);
+function mesRelativo(anio, mes, delta) {
+  let m = mes + delta;
+  let a = anio;
+  while (m < 1) {
+    m += 12;
+    a -= 1;
+  }
+  while (m > 12) {
+    m -= 12;
+    a += 1;
+  }
+  return `${a}-${String(m).padStart(2, '0')}`;
+}
+const mesLejano = mesRelativo(anioPrueba, mesNumPrueba, -2);
+const diaMesLejano = `${mesLejano}-15`;
+
+clic(`[data-debo-persona="${ana.id}"]`);
+doc.getElementById('debo-descripcion').value = 'Otro mes';
+doc.getElementById('debo-fecha').value = diaMesLejano;
+escribir('#debo-monto', '10000');
+elegirMedio('#debo-cuenta');
+doc.querySelector('#forma-debo').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+clic(`[data-debo-persona="${ana.id}"]`);
+doc.getElementById('debo-descripcion').value = 'Mes actual';
+doc.getElementById('debo-fecha').value = diaPrueba;
+escribir('#debo-monto', '5000');
+elegirMedio('#debo-cuenta');
+doc.querySelector('#forma-debo').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+comprobar(
+  'el detalle sigue filtrando el mes actual antes de pagar todo',
+  doc.querySelector(`[data-filtro-personas-mes="${mesPrueba}"][aria-pressed="true"]`) !== null,
+);
+clic(`[data-pagar-todo="${ana.id}"]`);
+const deudasMesPrueba = guardado().deudas.filter((d) => d.personId === ana.id);
+const deudaMesActual = deudasMesPrueba.find((d) => d.description === 'Mes actual');
+const deudaMesAnterior = deudasMesPrueba.find((d) => d.description === 'Otro mes');
+comprobar(
+  'pagar todo en un mes no salda deudas de otro mes',
+  Boolean(deudaMesActual?.settledAt) && !deudaMesAnterior?.settledAt,
+);
 
 /* ── 6. Presupuesto y fijos ─────────────────────────────────────── */
 
