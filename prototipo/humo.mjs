@@ -173,12 +173,8 @@ clic('.pestana[data-vista="resumen"]');
 
 clic('.pestana[data-vista="personas"]');
 comprobar('la vista de personas lista a Ana', texto('#lienzo').includes('Ana'));
-comprobar('Personas ofrece filtros de mes', doc.querySelector('.personas-filtros') !== null);
-comprobar('Personas no muestra filtro de categoría en la lista', doc.getElementById('filtro-personas-categoria') === null);
-comprobar(
-  'Personas arranca sin filtros',
-  doc.querySelector('[data-filtro-personas-mes="todo"][aria-pressed="true"]') !== null,
-);
+comprobar('la lista no muestra filtros de mes', doc.querySelector('.personas-filtros') === null);
+comprobar('la lista no muestra resumen por categoría', doc.querySelector('.personas-resumen-global') === null);
 comprobar('Personas lista montos por persona', texto('#lienzo').includes('Te debe'));
 comprobar('Personas muestra tablero lite', doc.getElementById('tablero').dataset.modo === 'lite');
 comprobar('Personas sigue mostrando lo que queda', texto('#tablero').includes('Te queda para el mes'));
@@ -187,21 +183,10 @@ comprobar(
   'la lista de personas no incluye desglose individual',
   doc.querySelector('.persona-fila .persona__por-categoria') === null,
 );
-comprobar('Personas muestra resumen por categoría', doc.querySelector('.personas-resumen-global') !== null);
-comprobar(
-  'el resumen general de categorías es clicable',
-  doc.querySelector('[data-personas-desglose-categoria]') !== null,
-);
-clic('[data-personas-desglose-categoria]');
-comprobar(
-  'al tocar una categoría general muestra los gastos',
-  doc.querySelector('.personas-gastos-global') !== null,
-);
-comprobar('ofrece volver a la lista de personas', doc.querySelector('[data-quitar-desglose-personas-general]') !== null);
-clic('[data-quitar-desglose-personas-general]');
 
 const ana = guardado().personas.find((p) => p.name === 'Ana');
 clic(`[data-ver-persona="${ana.id}"]`);
+comprobar('el detalle ofrece filtros de mes', doc.querySelector('.personas-filtros') !== null);
 comprobar('el detalle de persona mantiene tablero lite', doc.getElementById('tablero').dataset.modo === 'lite');
 comprobar('el detalle no muestra filtro de categoría', doc.getElementById('filtro-personas-categoria') === null);
 comprobar(
@@ -233,9 +218,7 @@ comprobar(
 );
 comprobar('el detalle no muestra el correo en pantalla', !detalleAna?.textContent.includes('@'));
 
-clic('[data-volver-personas]');
 clic(`[data-filtro-personas-mes="${mesPrueba}"]`);
-clic(`[data-ver-persona="${ana.id}"]`);
 comprobar(
   'con un mes filtrado tampoco repite desglose por mes',
   doc.querySelector('.persona__mes-grupo') === null,
