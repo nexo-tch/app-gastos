@@ -610,6 +610,42 @@ function mesActual() {
   return `${fecha.getUTCFullYear()}-${String(fecha.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
+/* ── 9b. Mis deudas (pasivos globales) ──────────────────────────── */
+
+clic('.pestana[data-vista="pasivos"]');
+comprobar('Mis deudas muestra el resumen vacío', texto('#lienzo').includes('Sin deudas registradas'));
+comprobar('Mis deudas oculta el tablero del mes', doc.getElementById('tablero').hidden === true);
+
+clic('[data-abrir="pasivo"]');
+doc.getElementById('pasivo-nombre').value = 'Visa test';
+doc.getElementById('pasivo-saldo').value = '2500000';
+doc.getElementById('forma-pasivo').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+
+comprobar('registra una deuda global', guardado().pasivos.some((p) => p.name === 'Visa test'));
+comprobar(
+  'crea movimiento inicial',
+  guardado().pasivoMovimientos.some((m) => m.kind === 'create'),
+);
+comprobar(
+  'muestra tarjetas y créditos',
+  texto('#lienzo').includes('Debes') && texto('#lienzo').includes('tarjetas y créditos'),
+);
+
+clic('[data-abonar-pasivo]');
+doc.getElementById('pasivo-mov-monto').value = '500000';
+doc.getElementById('forma-pasivo-mov').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+comprobar(
+  'el abono baja el saldo',
+  guardado().pasivos.find((p) => p.name === 'Visa test')?.balanceCents === 2_000_000_00,
+);
+
+clic('.pestana[data-vista="resumen"]');
+comprobar('vuelve a mostrar el tablero', doc.getElementById('tablero').hidden === false);
+
 /* ── 10. La pantalla de entrada ─────────────────────────────────── */
 
 await revisarEntrada();

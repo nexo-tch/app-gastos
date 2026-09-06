@@ -273,6 +273,46 @@ export const instancias = pgTable(
  * Avisos in-app cuando alguien con cuenta comparte un gasto contigo.
  * Viven aparte del estado de dominio: son eventos cross-user hacia el receptor.
  */
+/**
+ * Pasivos financieros globales: tarjetas, créditos, deudas fijas a personas.
+ * No entran al presupuesto del mes; el saldo se actualiza con abonos o ajustes manuales.
+ */
+export const pasivos = pgTable(
+  'pasivos',
+  {
+    id: text('id').notNull(),
+    ...dueno(),
+    nombre: text('nombre').notNull(),
+    tipo: text('tipo').notNull(),
+    saldo: integer('saldo').notNull().default(0),
+    cupo: integer('cupo'),
+    cuentaId: text('cuenta_id'),
+    personaId: text('persona_id'),
+    notas: text('notas'),
+    ...orden,
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.usuarioId, t.id] }) }),
+);
+
+export const pasivoMovimientos = pgTable(
+  'pasivo_movimientos',
+  {
+    id: text('id').notNull(),
+    ...dueno(),
+    pasivoId: text('pasivo_id').notNull(),
+    tipo: text('tipo').notNull(),
+    /** Monto del abono cuando tipo es `payment`. */
+    monto: integer('monto'),
+    saldoDespues: integer('saldo_despues').notNull(),
+    nota: text('nota'),
+    creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.usuarioId, t.id] }),
+    pasivoIdx: index('pasivo_movimientos_pasivo_idx').on(t.usuarioId, t.pasivoId, t.creadoEn),
+  }),
+);
+
 export const notificaciones = pgTable(
   'notificaciones',
   {

@@ -76,4 +76,14 @@ export const MIGRACIONES: Migracion[] = [
       "CREATE INDEX \"notificaciones_pendientes_idx\" ON \"notificaciones\" USING btree (\"usuario_id\",\"creada_en\");",
     ],
   },
+  {
+    nombre: "0006_pasivos",
+    sentencias: [
+      "CREATE TABLE \"pasivos\" (\n\t\"id\" text NOT NULL,\n\t\"usuario_id\" text NOT NULL,\n\t\"nombre\" text NOT NULL,\n\t\"tipo\" text NOT NULL,\n\t\"saldo\" integer DEFAULT 0 NOT NULL,\n\t\"cupo\" integer,\n\t\"cuenta_id\" text,\n\t\"persona_id\" text,\n\t\"notas\" text,\n\t\"posicion\" integer DEFAULT 0 NOT NULL,\n\tCONSTRAINT \"pasivos_usuario_id_id_pk\" PRIMARY KEY(\"usuario_id\",\"id\")\n);",
+      "CREATE TABLE \"pasivo_movimientos\" (\n\t\"id\" text NOT NULL,\n\t\"usuario_id\" text NOT NULL,\n\t\"pasivo_id\" text NOT NULL,\n\t\"tipo\" text NOT NULL,\n\t\"monto\" integer,\n\t\"saldo_despues\" integer NOT NULL,\n\t\"nota\" text,\n\t\"creado_en\" timestamp with time zone DEFAULT now() NOT NULL,\n\tCONSTRAINT \"pasivo_movimientos_usuario_id_id_pk\" PRIMARY KEY(\"usuario_id\",\"id\")\n);",
+      "ALTER TABLE \"pasivos\" ADD CONSTRAINT \"pasivos_usuario_id_usuarios_id_fk\" FOREIGN KEY (\"usuario_id\") REFERENCES \"public\".\"usuarios\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+      "ALTER TABLE \"pasivo_movimientos\" ADD CONSTRAINT \"pasivo_movimientos_usuario_id_usuarios_id_fk\" FOREIGN KEY (\"usuario_id\") REFERENCES \"public\".\"usuarios\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+      "CREATE INDEX \"pasivo_movimientos_pasivo_idx\" ON \"pasivo_movimientos\" USING btree (\"usuario_id\",\"pasivo_id\",\"creado_en\");",
+    ],
+  },
 ];

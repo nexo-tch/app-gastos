@@ -29,6 +29,8 @@ export type Estado = {
   presupuestos: Record<string, { totalCents: number; limites: Record<string, number> }>;
   fijos: Fijo[];
   instancias: Instancia[];
+  pasivos: Pasivo[];
+  pasivoMovimientos: PasivoMovimiento[];
 };
 
 /* ══ Validacion de lo que llega ═════════════════════════════════════ */
@@ -162,6 +164,34 @@ const instanciaSchema = z.object({
 });
 type Instancia = z.input<typeof instanciaSchema>;
 
+const tipoPasivo = z.enum(['card', 'loan', 'person', 'other']);
+const tipoMovimientoPasivo = z.enum(['create', 'adjust', 'payment']);
+
+const pasivoSchema = z.object({
+  id: identificador,
+  name: texto,
+  kind: tipoPasivo,
+  balanceCents: centavos,
+  limitCents: opcional(centavos),
+  accountId: opcional(identificador),
+  personId: opcional(identificador),
+  notes: opcional(texto),
+});
+type Pasivo = z.input<typeof pasivoSchema>;
+
+const pasivoMovimientoSchema = z.object({
+  id: identificador,
+  liabilityId: identificador,
+  kind: tipoMovimientoPasivo,
+  paymentCents: opcional(centavos),
+  balanceAfterCents: centavos,
+  note: opcional(texto),
+  createdAt: opcional(fecha),
+});
+type PasivoMovimiento = Omit<z.input<typeof pasivoMovimientoSchema>, 'createdAt'> & {
+  createdAt?: string;
+};
+
 const presupuestoSchema = z.object({
   mes: mesClave,
   totalCents: centavos,
@@ -188,6 +218,8 @@ export const cambiosSchema = z.object({
   deudas: delta(deudaSchema),
   fijos: delta(fijoSchema.extend({ posicion: z.number().int().default(0) })),
   instancias: delta(instanciaSchema),
+  pasivos: delta(pasivoSchema.extend({ posicion: z.number().int().default(0) })),
+  pasivoMovimientos: delta(pasivoMovimientoSchema),
   presupuestos: delta(presupuestoSchema),
 });
 
@@ -206,6 +238,8 @@ export const estadoExportadoSchema = z.object({
   deudas: z.array(deudaSchema).default([]),
   fijos: z.array(fijoSchema).default([]),
   instancias: z.array(instanciaSchema).default([]),
+  pasivos: z.array(pasivoSchema).default([]),
+  pasivoMovimientos: z.array(pasivoMovimientoSchema).default([]),
   presupuestos: z
     .record(
       mesClave,
@@ -244,6 +278,11 @@ export function estadoACambios(datos: EstadoExportado): Cambios {
       quitados: [],
     },
     instancias: { puestos: datos.instancias, quitados: [] },
+    pasivos: {
+      puestos: (datos.pasivos ?? []).map((p, i) => ({ ...p, posicion: i })),
+      quitados: [],
+    },
+    pasivoMovimientos: { puestos: datos.pasivoMovimientos ?? [], quitados: [] },
     presupuestos: {
       puestos: Object.entries(datos.presupuestos).map(([mes, v]) => ({
         mes,
@@ -286,6 +325,8 @@ export async function leerEstado(usuarioId: string): Promise<Estado> {
     topes,
     fijos,
     instancias,
+    pasivos,
+    pasivoMovimientos,
   ] = await Promise.all([
     db.select().from(esquema.cuentas).where(mio(esquema.cuentas)).orderBy(asc(esquema.cuentas.posicion)),
     db
@@ -307,6 +348,12 @@ export async function leerEstado(usuarioId: string): Promise<Estado> {
     db.select().from(esquema.topes).where(mio(esquema.topes)),
     db.select().from(esquema.fijos).where(mio(esquema.fijos)).orderBy(asc(esquema.fijos.posicion)),
     db.select().from(esquema.instancias).where(mio(esquema.instancias)),
+    db.select().from(esquema.pasivos).where(mio(esquema.pasivos)).orderBy(asc(esquema.pasivos.posicion)),
+    db
+      .select()
+      .from(esquema.pasivoMovimientos)
+      .where(mio(esquema.pasivoMovimientos))
+      .orderBy(asc(esquema.pasivoMovimientos.creadoEn)),
   ]);
 
   const porMes: Estado['presupuestos'] = {};
@@ -390,6 +437,25 @@ export async function leerEstado(usuarioId: string): Promise<Estado> {
       plannedCents: i.montoPlaneado,
       status: i.estado,
       expenseId: i.gastoId,
+    })),
+    pasivos: pasivos.map((p) => ({
+      id: p.id,
+      name: p.nombre,
+      kind: p.tipo,
+      balanceCents: p.saldo,
+      limitCents: p.cupo,
+      accountId: p.cuentaId,
+      personId: p.personaId,
+      notes: p.notas,
+    })),
+    pasivoMovimientos: pasivoMovimientos.map((m) => ({
+      id: m.id,
+      liabilityId: m.pasivoId,
+      kind: m.tipo,
+      paymentCents: m.monto,
+      balanceAfterCents: m.saldoDespues,
+      note: m.nota,
+      createdAt: m.creadoEn.toISOString(),
     })),
   };
 }
@@ -510,6 +576,18 @@ export async function aplicarCambios(
     // Primero lo que se quita y luego lo que se pone: si en un mismo envio
     // desaparece un gasto y nace otro reciclando el id, el orden importa.
     await quitarFilas(tx, esquema.instancias, usuarioId, cambios.instancias.quitados);
+    await quitarFilas(tx, esquema.pasivoMovimientos, usuarioId, cambios.pasivoMovimientos.quitados);
+    for (const tanda of enTandas(cambios.pasivos.quitados)) {
+      await tx
+        .delete(esquema.pasivoMovimientos)
+        .where(
+          and(
+            eq(esquema.pasivoMovimientos.usuarioId, usuarioId),
+            inArray(esquema.pasivoMovimientos.pasivoId, tanda),
+          ),
+        );
+    }
+    await quitarFilas(tx, esquema.pasivos, usuarioId, cambios.pasivos.quitados);
     await quitarFilas(tx, esquema.asignaciones, usuarioId, cambios.asignaciones.quitados);
     await quitarFilas(tx, esquema.abonos, usuarioId, cambios.abonos.quitados);
     await quitarFilas(tx, esquema.repartos, usuarioId, cambios.repartos.quitados);
@@ -680,6 +758,40 @@ export async function aplicarCambios(
         montoPlaneado: i.plannedCents,
         estado: i.status,
         gastoId: i.expenseId,
+      })),
+    );
+
+    await guardarFilas(
+      tx,
+      esquema.pasivos,
+      clave,
+      cambios.pasivos.puestos.map((p) => ({
+        id: p.id,
+        usuarioId,
+        nombre: p.name,
+        tipo: p.kind,
+        saldo: p.balanceCents,
+        cupo: p.limitCents,
+        cuentaId: p.accountId,
+        personaId: p.personId,
+        notas: p.notes,
+        posicion: p.posicion,
+      })),
+    );
+
+    await guardarFilas(
+      tx,
+      esquema.pasivoMovimientos,
+      clave,
+      cambios.pasivoMovimientos.puestos.map((m) => ({
+        id: m.id,
+        usuarioId,
+        pasivoId: m.liabilityId,
+        tipo: m.kind,
+        monto: m.paymentCents,
+        saldoDespues: m.balanceAfterCents,
+        nota: m.note,
+        creadoEn: m.createdAt ?? new Date(),
       })),
     );
 

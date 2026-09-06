@@ -239,6 +239,92 @@ describe('guardar y volver a leer', () => {
     expect((await leerEstado(usuarioId)).deudas[0]?.settledAt).toBe('2026-08-10T17:00:00.000Z');
   });
 
+  it('guarda pasivos globales y su historial', async () => {
+    const usuarioId = await registrar('pasivos@ejemplo.com');
+
+    await aplicarCambios(
+      usuarioId,
+      0,
+      cambios({
+        pasivos: {
+          puestos: [
+            {
+              id: 'visa',
+              name: 'Visa Bancolombia',
+              kind: 'card',
+              balanceCents: 2_500_000_00,
+              limitCents: 8_000_000_00,
+              posicion: 0,
+            },
+          ],
+        },
+        pasivoMovimientos: {
+          puestos: [
+            {
+              id: 'm1',
+              liabilityId: 'visa',
+              kind: 'create',
+              balanceAfterCents: 2_500_000_00,
+              createdAt: '2026-08-01T12:00:00-05:00',
+            },
+          ],
+        },
+      }),
+    );
+
+    const estado = await leerEstado(usuarioId);
+    expect(estado.pasivos[0]).toMatchObject({
+      id: 'visa',
+      name: 'Visa Bancolombia',
+      kind: 'card',
+      balanceCents: 2_500_000_00,
+      limitCents: 8_000_000_00,
+    });
+    expect(estado.pasivoMovimientos[0]?.kind).toBe('create');
+
+    await aplicarCambios(
+      usuarioId,
+      1,
+      cambios({
+        pasivos: {
+          puestos: [
+            {
+              id: 'visa',
+              name: 'Visa Bancolombia',
+              kind: 'card',
+              balanceCents: 2_000_000_00,
+              limitCents: 8_000_000_00,
+              posicion: 0,
+            },
+          ],
+        },
+        pasivoMovimientos: {
+          puestos: [
+            {
+              id: 'm1',
+              liabilityId: 'visa',
+              kind: 'create',
+              balanceAfterCents: 2_500_000_00,
+              createdAt: '2026-08-01T12:00:00-05:00',
+            },
+            {
+              id: 'm2',
+              liabilityId: 'visa',
+              kind: 'payment',
+              paymentCents: 500_000_00,
+              balanceAfterCents: 2_000_000_00,
+              createdAt: '2026-08-15T12:00:00-05:00',
+            },
+          ],
+        },
+      }),
+    );
+
+    const actualizado = await leerEstado(usuarioId);
+    expect(actualizado.pasivos[0]?.balanceCents).toBe(2_000_000_00);
+    expect(actualizado.pasivoMovimientos).toHaveLength(2);
+  });
+
   it('quitar un tope del mes lo borra de la base', async () => {
     const usuarioId = await registrar('topes@ejemplo.com');
 

@@ -717,6 +717,33 @@ button {
   gap: 28px;
 }
 
+.pasivos-resumen {
+  padding: 20px 18px;
+  border-radius: var(--radio);
+  background: linear-gradient(155deg, var(--tablero-fondo), var(--tablero-fondo-2));
+  color: var(--tablero-texto);
+}
+
+.pasivos-resumen__titulo {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.pasivos-resumen__titulo--ok {
+  color: var(--tablero-tenue);
+}
+
+.pasivos-resumen .pista {
+  margin: 8px 0 0;
+  color: var(--tablero-tenue);
+}
+
+.pasivos-resumen .pista b {
+  color: var(--tablero-texto);
+}
+
 .bloque {
   display: flex;
   flex-direction: column;

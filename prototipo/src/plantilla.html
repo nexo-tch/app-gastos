@@ -94,6 +94,15 @@
           </svg>
           <span>Personas</span>
         </button>
+        <button type="button" class="pestana" data-vista="pasivos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2.5" y="5.5" width="19" height="13" rx="2.2" />
+            <path d="M2.5 10.5h19" />
+            <path d="M6.5 15.5h4" />
+          </svg>
+          <span>Mis deudas</span>
+        </button>
         <button type="button" class="pestana" data-vista="fijos">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -620,6 +629,133 @@
           <input type="file" id="datos-archivo" accept="application/json" hidden />
         </div>
       </div>
+    </dialog>
+
+    <!-- Crear o editar un pasivo (deuda global) -->
+    <dialog class="hoja hoja--angosta" id="dialogo-pasivo" aria-labelledby="titulo-pasivo">
+      <form method="dialog" class="hoja__forma" id="forma-pasivo">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-pasivo">Nueva deuda</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="hoja__cuerpo">
+          <label class="campo">
+            <span class="campo__etiqueta">Nombre</span>
+            <input class="entrada" id="pasivo-nombre" placeholder="Visa Bancolombia, crédito vehículo…" required />
+          </label>
+
+          <label class="campo">
+            <span class="campo__etiqueta">Tipo</span>
+            <select class="entrada" id="pasivo-tipo">
+              <option value="card">Tarjeta</option>
+              <option value="loan">Crédito</option>
+              <option value="person">Persona</option>
+              <option value="other">Otro</option>
+            </select>
+          </label>
+
+          <label class="campo campo--monto">
+            <span class="campo__etiqueta" id="pasivo-saldo-etiqueta">Saldo actual</span>
+            <div class="monto">
+              <span class="monto__signo" aria-hidden="true">$</span>
+              <input
+                class="monto__entrada"
+                id="pasivo-saldo"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="0"
+                required
+              />
+            </div>
+          </label>
+
+          <label class="campo campo--monto">
+            <span class="campo__etiqueta">Cupo (opcional)</span>
+            <div class="monto">
+              <span class="monto__signo" aria-hidden="true">$</span>
+              <input
+                class="monto__entrada"
+                id="pasivo-cupo"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="0"
+              />
+            </div>
+          </label>
+
+          <div class="pareja">
+            <label class="campo">
+              <span class="campo__etiqueta">Medio de pago (opcional)</span>
+              <select class="entrada" id="pasivo-cuenta">
+                <option value="">—</option>
+              </select>
+            </label>
+
+            <label class="campo">
+              <span class="campo__etiqueta">Persona (opcional)</span>
+              <select class="entrada" id="pasivo-persona">
+                <option value="">—</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="campo">
+            <span class="campo__etiqueta">Notas (opcional)</span>
+            <input class="entrada" id="pasivo-notas" placeholder="Cuota mínima, día de corte…" />
+          </label>
+        </div>
+
+        <div class="hoja__pie">
+          <button type="button" class="boton boton--peligro" id="pasivo-eliminar" hidden>Eliminar</button>
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Cancelar</button>
+          <button type="submit" class="boton boton--solido">Guardar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Abonar o ajustar saldo de un pasivo -->
+    <dialog class="hoja hoja--angosta" id="dialogo-pasivo-mov" aria-labelledby="titulo-pasivo-mov">
+      <form method="dialog" class="hoja__forma" id="forma-pasivo-mov">
+        <input type="hidden" id="pasivo-mov-id" />
+        <input type="hidden" id="pasivo-mov-modo" />
+
+        <div class="hoja__cabeza">
+          <h2 id="titulo-pasivo-mov">Registrar abono</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="hoja__cuerpo">
+          <p class="pista" id="pasivo-mov-pista"></p>
+
+          <label class="campo campo--monto" id="pasivo-mov-campo-monto">
+            <span class="campo__etiqueta" id="pasivo-mov-monto-etiqueta">Cuánto abonaste</span>
+            <div class="monto">
+              <span class="monto__signo" aria-hidden="true">$</span>
+              <input
+                class="monto__entrada"
+                id="pasivo-mov-monto"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="0"
+                required
+              />
+            </div>
+          </label>
+
+          <label class="campo">
+            <span class="campo__etiqueta">Nota (opcional)</span>
+            <input class="entrada" id="pasivo-mov-nota" placeholder="Pago de marzo, extracto del banco…" />
+          </label>
+        </div>
+
+        <div class="hoja__pie">
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Cancelar</button>
+          <button type="submit" class="boton boton--solido">Guardar</button>
+        </div>
+      </form>
     </dialog>
 
     <div class="avisos" id="avisos" role="status" aria-live="polite"></div>

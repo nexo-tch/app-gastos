@@ -68,6 +68,8 @@
       { nombre: 'deudas', ordenada: false },
       { nombre: 'fijos', ordenada: true },
       { nombre: 'instancias', ordenada: false },
+      { nombre: 'pasivos', ordenada: true },
+      { nombre: 'pasivoMovimientos', ordenada: false },
     ];
 
     let revision = 0;
@@ -705,6 +707,8 @@
     presupuestos: {},
     fijos: [],
     instancias: [],
+    pasivos: [],
+    pasivoMovimientos: [],
   });
 
   /**
@@ -726,6 +730,7 @@
   let vista = 'resumen';
   let agregandoPersona = false;
   let personaDetalle = null;
+  let pasivoDetalle = null;
   let correoPersonaEditando = null;
   let rangoCategorias = 6;
 
@@ -750,6 +755,30 @@
 
   const personaPorId = (idPer) => datos.personas.find((p) => p.id === idPer) ?? null;
   const cuentaPorId = (idCta) => datos.cuentas.find((c) => c.id === idCta) ?? null;
+  const pasivoPorId = (idPas) => datos.pasivos.find((p) => p.id === idPas) ?? null;
+
+  const ETIQUETAS_PASIVO = {
+    card: 'Tarjeta',
+    loan: 'Crédito',
+    person: 'Persona',
+    other: 'Otro',
+  };
+
+  const ETIQUETAS_MOV_PASIVO = {
+    create: 'Saldo inicial',
+    adjust: 'Ajuste de saldo',
+    payment: 'Abono',
+  };
+
+  const totalPasivosTarjetasCreditos = () =>
+    datos.pasivos
+      .filter((p) => p.kind === 'card' || p.kind === 'loan')
+      .reduce((s, p) => s + Math.max(0, p.balanceCents), 0);
+
+  const movimientosDePasivo = (idPasivo) =>
+    datos.pasivoMovimientos
+      .filter((m) => m.liabilityId === idPasivo)
+      .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 
   const ETIQUETAS_MEDIO = {
     cash: 'Efectivo',
@@ -2080,6 +2109,149 @@
       </div>`;
   }
 
+  /* ══ Vista: pasivos (Mis deudas) ═════════════════════════════════ */
+
+  function vistaPasivos() {
+    if (pasivoDetalle) return vistaPasivoDetalle(pasivoDetalle);
+
+    const tarjetasCreditos = totalPasivosTarjetasCreditos();
+    const total = datos.pasivos.reduce((s, p) => s + Math.max(0, p.balanceCents), 0);
+    const lista = datos.pasivos;
+
+    return `
+      <section class="pasivos-resumen" aria-live="polite">
+        ${
+          tarjetasCreditos > 0
+            ? `<p class="pasivos-resumen__titulo">Debes <span class="cifra">${plata(tarjetasCreditos)}</span> en tarjetas y créditos</p>`
+            : total > 0
+              ? `<p class="pasivos-resumen__titulo">Debes <span class="cifra">${plata(total)}</span> en total</p>`
+              : `<p class="pasivos-resumen__titulo pasivos-resumen__titulo--ok">Sin deudas registradas</p>`
+        }
+        ${
+          tarjetasCreditos > 0 && total > tarjetasCreditos
+            ? `<p class="pista">Incluyendo otras deudas: <b class="cifra">${plata(total)}</b> en total</p>`
+            : ''
+        }
+      </section>
+
+      <section class="bloque">
+        <div class="bloque__cabeza">
+          <h2>Tus deudas</h2>
+          <button type="button" class="boton boton--marco boton--chico" data-abrir="pasivo">Nueva deuda</button>
+        </div>
+        <p class="pista">
+          Obligaciones que ya traías: tarjetas, créditos, préstamos. No entran al presupuesto del mes;
+          aquí solo llevas el saldo y registras abonos o ajustes cuando revisas el banco.
+        </p>
+        ${
+          lista.length === 0
+            ? `<div class="vacio">
+                 <strong>Sin deudas registradas</strong>
+                 Agrega tu tarjeta, crédito o préstamo para llevar el saldo al día.
+               </div>`
+            : `<div class="tarjeta">
+                 ${lista
+                   .map((pasivo) => {
+                     const uso =
+                       pasivo.limitCents && pasivo.limitCents > 0
+                         ? Math.min((pasivo.balanceCents / pasivo.limitCents) * 100, 100)
+                         : null;
+                     const enlace = pasivo.accountId
+                       ? cuentaPorId(pasivo.accountId)?.name
+                       : pasivo.personId
+                         ? personaPorId(pasivo.personId)?.name
+                         : null;
+
+                     return `
+                       <div class="categoria">
+                         <div class="categoria__nombre">
+                           <span>${escapar(pasivo.name)}</span>
+                           <span class="rotulo">${escapar(ETIQUETAS_PASIVO[pasivo.kind] ?? pasivo.kind)}</span>
+                         </div>
+                         <div class="categoria__cifra">${plata(pasivo.balanceCents)}</div>
+                         ${
+                           uso !== null
+                             ? `<div class="medidor">
+                                  <span class="medidor__relleno" style="width:${uso}%"></span>
+                                </div>
+                                <div class="categoria__nota">${Math.round(uso)}% del cupo · ${plata(pasivo.limitCents)}</div>`
+                             : enlace
+                               ? `<div class="categoria__nota">${escapar(enlace)}</div>`
+                               : ''
+                         }
+                         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+                           <button type="button" class="boton boton--marco boton--chico"
+                                   data-ver-pasivo="${pasivo.id}">Ver historial</button>
+                           <button type="button" class="boton boton--fantasma boton--chico"
+                                   data-abonar-pasivo="${pasivo.id}">Abonar</button>
+                           <button type="button" class="boton boton--fantasma boton--chico"
+                                   data-editar-pasivo="${pasivo.id}">Editar</button>
+                         </div>
+                       </div>`;
+                   })
+                   .join('')}
+               </div>`
+        }
+      </section>`;
+  }
+
+  function vistaPasivoDetalle(idPasivo) {
+    const pasivo = pasivoPorId(idPasivo);
+    if (!pasivo) {
+      pasivoDetalle = null;
+      return vistaPasivos();
+    }
+
+    const movimientos = movimientosDePasivo(idPasivo);
+
+    return `
+      <section class="bloque">
+        <div class="bloque__cabeza">
+          <button type="button" class="boton boton--fantasma boton--chico" data-volver-pasivos>← Volver</button>
+          <h2>${escapar(pasivo.name)}</h2>
+        </div>
+        <p class="pista">
+          ${escapar(ETIQUETAS_PASIVO[pasivo.kind] ?? pasivo.kind)} · Saldo actual
+          <b class="cifra">${plata(pasivo.balanceCents)}</b>
+          ${pasivo.notes ? ` · ${escapar(pasivo.notes)}` : ''}
+        </p>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+          <button type="button" class="boton boton--marco boton--chico" data-abonar-pasivo="${pasivo.id}">
+            Registrar abono
+          </button>
+          <button type="button" class="boton boton--fantasma boton--chico" data-ajustar-pasivo="${pasivo.id}">
+            Actualizar saldo
+          </button>
+          <button type="button" class="boton boton--fantasma boton--chico" data-editar-pasivo="${pasivo.id}">
+            Editar
+          </button>
+        </div>
+        ${
+          movimientos.length === 0
+            ? sinNada('Todavía no hay movimientos.')
+            : `<div class="lista">
+                 ${movimientos
+                   .map((mov) => {
+                     const detalle =
+                       mov.kind === 'payment' && mov.paymentCents
+                         ? `−${plata(mov.paymentCents)} · queda ${plata(mov.balanceAfterCents)}`
+                         : `Saldo ${plata(mov.balanceAfterCents)}`;
+                     return `
+                       <div class="renglon">
+                         <div class="renglon__cuerpo">
+                           <strong>${escapar(ETIQUETAS_MOV_PASIVO[mov.kind] ?? mov.kind)}</strong>
+                           <span class="renglon__detalle">${escapar(detalle)}</span>
+                           ${mov.note ? `<span class="renglon__detalle">${escapar(mov.note)}</span>` : ''}
+                         </div>
+                         <time class="renglon__fecha">${escapar(nombreDia(diaDeIso(mov.createdAt ?? ahora())))}</time>
+                       </div>`;
+                   })
+                   .join('')}
+               </div>`
+        }
+      </section>`;
+  }
+
   /* ══ Vista: fijos ════════════════════════════════════════════════ */
 
   function vistaFijos() {
@@ -2164,8 +2336,8 @@
     document.getElementById('mes-nombre').textContent = nombreMes(mes);
 
     const tablero = document.getElementById('tablero');
-    tablero.hidden = false;
-    pintarTablero(resumen, vista === 'resumen' ? 'completo' : 'lite');
+    tablero.hidden = vista === 'pasivos';
+    if (vista !== 'pasivos') pintarTablero(resumen, vista === 'resumen' ? 'completo' : 'lite');
 
     document.querySelectorAll('.pestana').forEach((boton) => {
       const activa = boton.dataset.vista === vista;
@@ -2178,6 +2350,7 @@
     else if (vista === 'gastos') lienzo.innerHTML = vistaGastos();
     else if (vista === 'presupuesto') lienzo.innerHTML = vistaPresupuesto(resumen);
     else if (vista === 'personas') lienzo.innerHTML = vistaPersonas();
+    else if (vista === 'pasivos') lienzo.innerHTML = vistaPasivos();
     else if (vista === 'fijos') lienzo.innerHTML = vistaFijos();
 
     pintarBadgeNotificaciones();
@@ -2483,6 +2656,137 @@
     selector.value = fijo?.categoryId ?? disponibles[0]?.id ?? '';
 
     dialogoFijo.showModal();
+  }
+
+  /* ══ Diálogo de pasivo (Mis deudas) ══════════════════════════════ */
+
+  const dialogoPasivo = document.getElementById('dialogo-pasivo');
+  const dialogoPasivoMov = document.getElementById('dialogo-pasivo-mov');
+  let pasivoEditando = null;
+
+  function rellenarSelectoresPasivo(pasivo = null) {
+    const selectorCuenta = document.getElementById('pasivo-cuenta');
+    selectorCuenta.innerHTML =
+      `<option value="">—</option>` +
+      datos.cuentas
+        .map((c) => `<option value="${c.id}">${escapar(c.name)}</option>`)
+        .join('');
+    selectorCuenta.value = pasivo?.accountId ?? '';
+
+    const selectorPersona = document.getElementById('pasivo-persona');
+    selectorPersona.innerHTML =
+      `<option value="">—</option>` +
+      datos.personas
+        .map((p) => `<option value="${p.id}">${escapar(p.name)}</option>`)
+        .join('');
+    selectorPersona.value = pasivo?.personId ?? '';
+  }
+
+  function abrirPasivo(idPasivo) {
+    const pasivo = idPasivo ? pasivoPorId(idPasivo) : null;
+    pasivoEditando = pasivo?.id ?? null;
+
+    document.getElementById('titulo-pasivo').textContent = pasivo ? 'Editar deuda' : 'Nueva deuda';
+    document.getElementById('pasivo-nombre').value = pasivo?.name ?? '';
+    document.getElementById('pasivo-tipo').value = pasivo?.kind ?? 'card';
+    document.getElementById('pasivo-saldo').value = textoDesdeCentavos(pasivo?.balanceCents ?? 0);
+    document.getElementById('pasivo-saldo').readOnly = Boolean(pasivo);
+    document.getElementById('pasivo-saldo-etiqueta').textContent = pasivo
+      ? 'Saldo actual (ajusta desde historial)'
+      : 'Saldo actual';
+    document.getElementById('pasivo-cupo').value = pasivo?.limitCents
+      ? textoDesdeCentavos(pasivo.limitCents)
+      : '';
+    document.getElementById('pasivo-notas').value = pasivo?.notes ?? '';
+    document.getElementById('pasivo-eliminar').hidden = !pasivo;
+
+    rellenarSelectoresPasivo(pasivo);
+    dialogoPasivo.showModal();
+    setTimeout(() => document.getElementById('pasivo-nombre').focus(), 40);
+  }
+
+  function abrirPasivoMov(idPasivo, modo) {
+    const pasivo = pasivoPorId(idPasivo);
+    if (!pasivo) return;
+
+    document.getElementById('pasivo-mov-id').value = idPasivo;
+    document.getElementById('pasivo-mov-modo').value = modo;
+    document.getElementById('pasivo-mov-nota').value = '';
+
+    const esAbono = modo === 'payment';
+    document.getElementById('titulo-pasivo-mov').textContent = esAbono
+      ? 'Registrar abono'
+      : 'Actualizar saldo';
+    document.getElementById('pasivo-mov-monto-etiqueta').textContent = esAbono
+      ? 'Cuánto abonaste'
+      : 'Saldo según el banco';
+    document.getElementById('pasivo-mov-pista').innerHTML = esAbono
+      ? `Saldo actual de <b>${escapar(pasivo.name)}</b>: <span class="cifra">${plata(pasivo.balanceCents)}</span>`
+      : `Reemplaza el saldo de <b>${escapar(pasivo.name)}</b> (hoy ${plata(pasivo.balanceCents)}).`;
+    document.getElementById('pasivo-mov-monto').value = esAbono
+      ? ''
+      : textoDesdeCentavos(pasivo.balanceCents);
+
+    dialogoPasivoMov.showModal();
+    setTimeout(() => document.getElementById('pasivo-mov-monto').focus(), 40);
+  }
+
+  function eliminarPasivo(idPasivo) {
+    const pasivo = pasivoPorId(idPasivo);
+    if (!pasivo) return;
+    if (!confirm(`¿Eliminar "${pasivo.name}" y todo su historial?`)) return;
+
+    mutar((d) => {
+      d.pasivos = d.pasivos.filter((p) => p.id !== idPasivo);
+      d.pasivoMovimientos = d.pasivoMovimientos.filter((m) => m.liabilityId !== idPasivo);
+    });
+    pasivoDetalle = null;
+    avisar('Deuda eliminada');
+  }
+
+  function guardarPasivoMovimiento() {
+    const idPasivo = document.getElementById('pasivo-mov-id').value;
+    const modo = document.getElementById('pasivo-mov-modo').value;
+    const centavos = centavosDesdeTexto(document.getElementById('pasivo-mov-monto').value);
+    const nota = document.getElementById('pasivo-mov-nota').value.trim() || null;
+
+    if (centavos <= 0) {
+      avisar('Ponle un monto');
+      return false;
+    }
+
+    mutar((d) => {
+      const pasivo = d.pasivos.find((p) => p.id === idPasivo);
+      if (!pasivo) return;
+
+      if (modo === 'payment') {
+        const nuevoSaldo = Math.max(0, pasivo.balanceCents - centavos);
+        pasivo.balanceCents = nuevoSaldo;
+        d.pasivoMovimientos.push({
+          id: id(),
+          liabilityId: idPasivo,
+          kind: 'payment',
+          paymentCents: centavos,
+          balanceAfterCents: nuevoSaldo,
+          note: nota,
+          createdAt: ahora(),
+        });
+      } else {
+        pasivo.balanceCents = centavos;
+        d.pasivoMovimientos.push({
+          id: id(),
+          liabilityId: idPasivo,
+          kind: 'adjust',
+          paymentCents: null,
+          balanceAfterCents: centavos,
+          note: nota,
+          createdAt: ahora(),
+        });
+      }
+    });
+
+    avisar(modo === 'payment' ? 'Abono registrado' : 'Saldo actualizado');
+    return true;
   }
 
   /* ══ Diálogo de categoría ════════════════════════════════════════ */
@@ -3775,6 +4079,9 @@
         correoPersonaEditando = null;
         dialogoCorreoPersona.close();
       }
+      if (pestana.dataset.vista !== 'pasivos') {
+        pasivoDetalle = null;
+      }
       vista = pestana.dataset.vista;
       pintar();
       return;
@@ -3787,6 +4094,9 @@
         personaDetalle = null;
         correoPersonaEditando = null;
         dialogoCorreoPersona.close();
+      }
+      if (ir.dataset.ir !== 'pasivos') {
+        pasivoDetalle = null;
       }
       vista = ir.dataset.ir;
       pintar();
@@ -3819,6 +4129,37 @@
       return;
     }
 
+    const verPasivo = objetivo.closest('[data-ver-pasivo]');
+    if (verPasivo) {
+      pasivoDetalle = verPasivo.dataset.verPasivo;
+      pintar();
+      return;
+    }
+
+    if (objetivo.closest('[data-volver-pasivos]')) {
+      pasivoDetalle = null;
+      pintar();
+      return;
+    }
+
+    const abonarPasivo = objetivo.closest('[data-abonar-pasivo]');
+    if (abonarPasivo) {
+      abrirPasivoMov(abonarPasivo.dataset.abonarPasivo, 'payment');
+      return;
+    }
+
+    const ajustarPasivo = objetivo.closest('[data-ajustar-pasivo]');
+    if (ajustarPasivo) {
+      abrirPasivoMov(ajustarPasivo.dataset.ajustarPasivo, 'adjust');
+      return;
+    }
+
+    const editarPasivo = objetivo.closest('[data-editar-pasivo]');
+    if (editarPasivo) {
+      abrirPasivo(editarPasivo.dataset.editarPasivo);
+      return;
+    }
+
     const editarCorreoPersona = objetivo.closest('[data-editar-correo-persona]');
     if (editarCorreoPersona) {
       abrirCorreoPersona(editarCorreoPersona.dataset.editarCorreoPersona);
@@ -3829,6 +4170,7 @@
     if (abrir) {
       if (abrir.dataset.abrir === 'gasto') abrirGasto(null);
       if (abrir.dataset.abrir === 'fijo') abrirFijo(null);
+      if (abrir.dataset.abrir === 'pasivo') abrirPasivo(null);
       if (abrir.dataset.abrir === 'categoria') abrirCategoria(null);
       if (abrir.dataset.abrir === 'medio') abrirMedio(null);
       if (abrir.dataset.abrir === 'datos') {
@@ -4436,6 +4778,79 @@
     });
 
     avisar(editando ? 'Fijo actualizado' : 'Fijo creado');
+  });
+
+  document.getElementById('forma-pasivo').addEventListener('submit', () => {
+    const nombre = document.getElementById('pasivo-nombre').value.trim();
+    const kind = document.getElementById('pasivo-tipo').value;
+    const saldo = centavosDesdeTexto(document.getElementById('pasivo-saldo').value);
+    const cupoTexto = document.getElementById('pasivo-cupo').value.trim();
+    const limitCents = cupoTexto ? centavosDesdeTexto(cupoTexto) : null;
+    const accountId = document.getElementById('pasivo-cuenta').value || null;
+    const personId = document.getElementById('pasivo-persona').value || null;
+    const notes = document.getElementById('pasivo-notas').value.trim() || null;
+
+    if (!nombre) return;
+    if (!pasivoEditando && saldo < 0) {
+      avisar('El saldo no puede ser negativo');
+      return;
+    }
+
+    const editando = pasivoEditando;
+
+    mutar((d) => {
+      if (editando) {
+        const pasivo = d.pasivos.find((p) => p.id === editando);
+        if (!pasivo) return;
+        Object.assign(pasivo, {
+          name: nombre,
+          kind,
+          limitCents: limitCents && limitCents > 0 ? limitCents : null,
+          accountId,
+          personId,
+          notes,
+        });
+      } else {
+        const idPasivo = id();
+        d.pasivos.push({
+          id: idPasivo,
+          name: nombre,
+          kind,
+          balanceCents: saldo,
+          limitCents: limitCents && limitCents > 0 ? limitCents : null,
+          accountId,
+          personId,
+          notes,
+        });
+        d.pasivoMovimientos.push({
+          id: id(),
+          liabilityId: idPasivo,
+          kind: 'create',
+          paymentCents: null,
+          balanceAfterCents: saldo,
+          note: null,
+          createdAt: ahora(),
+        });
+      }
+    });
+
+    avisar(editando ? 'Deuda actualizada' : 'Deuda registrada');
+  });
+
+  document.getElementById('pasivo-eliminar').addEventListener('click', () => {
+    if (pasivoEditando) {
+      dialogoPasivo.close();
+      eliminarPasivo(pasivoEditando);
+    }
+  });
+
+  dialogoPasivo.addEventListener('close', () => {
+    pasivoEditando = null;
+    document.getElementById('pasivo-saldo').readOnly = false;
+  });
+
+  document.getElementById('forma-pasivo-mov').addEventListener('submit', (evento) => {
+    if (!guardarPasivoMovimiento()) evento.preventDefault();
   });
 
   document.getElementById('forma-debo').addEventListener('submit', (evento) => {
