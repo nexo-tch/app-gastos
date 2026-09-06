@@ -89,6 +89,15 @@ comprobar('el tablero en resumen es completo', doc.getElementById('tablero').dat
 comprobar('la barra marca el día de hoy', doc.querySelector('.barra__hoy') !== null);
 comprobar('aparece el desglose por categoría', texto('#lienzo').includes('En qué se te va'));
 comprobar('el resumen muestra barra de distribución', doc.querySelector('.distribucion') !== null);
+clic('[data-ver-categoria]');
+comprobar(
+  'al tocar una categoría abre Gastos filtrados',
+  doc.querySelector('.pestana[data-vista="gastos"]').getAttribute('aria-current') === 'page',
+);
+comprobar('el filtro ofrece volver a ver todos', doc.querySelector('[data-quitar-filtro-categoria]') !== null);
+clic('[data-quitar-filtro-categoria]');
+comprobar('quitar filtro vuelve a ver todos los gastos', texto('#lienzo').includes('Gastos de'));
+clic('.pestana[data-vista="resumen"]');
 comprobar('aparece historial por categoría', texto('#lienzo').includes('Historial por categoría'));
 comprobar('ofrece rangos de meses en el historial', doc.querySelector('[data-rango-categorias="6"]') !== null);
 clic('[data-rango-categorias="todo"]');

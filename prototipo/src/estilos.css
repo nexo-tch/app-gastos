@@ -914,6 +914,45 @@ button {
   border-top: 0;
 }
 
+button.categoria.categoria--clic {
+  width: 100%;
+  margin: 0;
+  padding: 13px 14px;
+  border: 0;
+  border-top: 1px solid var(--borde);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+button.categoria.categoria--clic:first-child {
+  border-top: 0;
+}
+
+button.categoria.categoria--clic:hover,
+button.categoria.categoria--clic:focus-visible {
+  background: var(--superficie-2);
+}
+
+.categoria__enlace {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+
+.categoria__enlace:hover,
+.categoria__enlace:focus-visible {
+  text-decoration: underline;
+}
+
 .categoria__nombre {
   display: flex;
   align-items: center;

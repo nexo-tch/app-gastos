@@ -733,6 +733,7 @@
   let pasivoDetalle = null;
   let correoPersonaEditando = null;
   let rangoCategorias = 6;
+  let filtroCategoria = null;
 
   /** Unico punto de escritura: aplica el cambio, persiste y redibuja. */
   function mutar(cambio) {
@@ -1120,7 +1121,8 @@
         const nota = notaCategoria(c, parte);
 
         return `
-          <div class="categoria">
+          <button type="button" class="categoria categoria--clic" data-ver-categoria="${c.categoryId}"
+                  aria-label="Ver gastos de ${escapar(nombreCategoria(c.categoryId))}">
             <div class="categoria__nombre">
               <i class="categoria__mecha" style="background:${colorCategoria(c.categoryId)}"></i>
               <span>${escapar(nombreCategoria(c.categoryId))}</span>
@@ -1137,7 +1139,7 @@
                 : ''
             }
             <div class="categoria__nota" data-estado="${c.state}">${nota}</div>
-          </div>`;
+          </button>`;
       })
       .join('');
 
@@ -1435,14 +1437,15 @@
                    .map((c) => {
                      const parte = Math.round(c.share * 100);
                      return `
-                       <div class="categoria">
+                       <button type="button" class="categoria categoria--clic" data-ver-categoria="${c.categoryId}"
+                               aria-label="Ver gastos de ${escapar(nombreCategoria(c.categoryId))}">
                          <div class="categoria__nombre">
                            <i class="categoria__mecha" style="background:${colorCategoria(c.categoryId)}"></i>
                            <span>${escapar(nombreCategoria(c.categoryId))}</span>
                          </div>
                          <div class="categoria__cifra">${plata(c.spentCents)}</div>
                          <div class="categoria__nota">${parte}% · ${c.expenseCount} movimiento${c.expenseCount === 1 ? '' : 's'}</div>
-                       </div>`;
+                       </button>`;
                    })
                    .join('')}
                </div>`
@@ -1455,15 +1458,36 @@
   /* ══ Vista: gastos ═══════════════════════════════════════════════ */
 
   function vistaGastos() {
-    const lista = gastosDelMes(mes);
+    const lista = gastosDelMes(mes).filter(
+      (g) => !filtroCategoria || g.categoryId === filtroCategoria,
+    );
+    const filtrando = Boolean(filtroCategoria);
+    const tituloMes = nombreMes(mes);
 
     if (lista.length === 0) {
       return `
         <section class="bloque">
-          <div class="bloque__cabeza"><h2>Gastos de ${escapar(nombreMes(mes))}</h2></div>
+          <div class="bloque__cabeza">
+            <h2>${
+              filtrando
+                ? `${escapar(nombreCategoria(filtroCategoria))} · ${escapar(tituloMes)}`
+                : `Gastos de ${escapar(tituloMes)}`
+            }</h2>
+            ${
+              filtrando
+                ? `<button type="button" class="boton boton--fantasma boton--chico" data-quitar-filtro-categoria>
+                     Ver todos
+                   </button>`
+                : ''
+            }
+          </div>
           <div class="vacio">
-            <strong>Este mes está en blanco</strong>
-            Registra un gasto y aparecerá aquí, agrupado por día.
+            <strong>${
+              filtrando
+                ? `Sin gastos de ${escapar(nombreCategoria(filtroCategoria))} este mes`
+                : 'Este mes está en blanco'
+            }</strong>
+            ${filtrando ? 'Prueba otro mes o quita el filtro.' : 'Registra un gasto y aparecerá aquí, agrupado por día.'}
           </div>
         </section>`;
     }
@@ -1480,8 +1504,21 @@
     return `
       <section class="bloque">
         <div class="bloque__cabeza">
-          <h2>Gastos de ${escapar(nombreMes(mes))}</h2>
-          <span class="rotulo">${lista.length} movimientos · ${plata(total)} tuyos</span>
+          <div>
+            <h2>${
+              filtrando
+                ? `${escapar(nombreCategoria(filtroCategoria))} · ${escapar(tituloMes)}`
+                : `Gastos de ${escapar(tituloMes)}`
+            }</h2>
+            <span class="rotulo">${lista.length} movimientos · ${plata(total)} tuyos</span>
+          </div>
+          ${
+            filtrando
+              ? `<button type="button" class="boton boton--fantasma boton--chico" data-quitar-filtro-categoria>
+                   Ver todos
+                 </button>`
+              : ''
+          }
         </div>
         <div class="lista">
           ${Array.from(porDia.entries())
@@ -1606,7 +1643,9 @@
                 <div class="categoria categoria--tope">
                   <div class="categoria__nombre">
                     <i class="categoria__mecha" style="background:${categoria.color}"></i>
-                    <span>${escapar(categoria.name)}</span>
+                    <button type="button" class="categoria__enlace" data-ver-categoria="${categoria.id}">
+                      ${escapar(categoria.name)}
+                    </button>
                     <button type="button" class="icono icono--mini" data-editar-categoria="${categoria.id}"
                             aria-label="Cambiar nombre o color de ${escapar(categoria.name)}">✎</button>
                   </div>
@@ -4098,7 +4137,24 @@
       if (ir.dataset.ir !== 'pasivos') {
         pasivoDetalle = null;
       }
+      if (ir.dataset.ir === 'gastos') {
+        filtroCategoria = null;
+      }
       vista = ir.dataset.ir;
+      pintar();
+      return;
+    }
+
+    const verCategoria = objetivo.closest('[data-ver-categoria]');
+    if (verCategoria) {
+      filtroCategoria = verCategoria.dataset.verCategoria;
+      vista = 'gastos';
+      pintar();
+      return;
+    }
+
+    if (objetivo.closest('[data-quitar-filtro-categoria]')) {
+      filtroCategoria = null;
       pintar();
       return;
     }
