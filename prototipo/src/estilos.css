@@ -1431,6 +1431,33 @@ button.categoria.categoria--clic:focus-visible {
   font-size: 12px;
 }
 
+.persona__categoria-fila--clic {
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.persona__categoria-fila--clic:hover {
+  background: var(--superficie-2);
+}
+
+.persona__categoria-fila--clic[aria-pressed='true'] {
+  background: var(--superficie-3);
+}
+
+.persona__desglose-activo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
 .persona__desglose-titulo {
   font-size: 11px;
   font-weight: 600;

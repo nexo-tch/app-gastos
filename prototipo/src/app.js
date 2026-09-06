@@ -742,6 +742,8 @@
   let rangoCategorias = 6;
   let filtroCategoria = null;
   let filtroPersonasMes = null;
+  /** En detalle de persona: categoría elegida en el desglose por mes. */
+  let personaDetalleDesglose = null;
 
   /** Unico punto de escritura: aplica el cambio, persiste y redibuja. */
   function mutar(cambio) {
@@ -2002,7 +2004,7 @@
       .sort((a, b) => b.month.localeCompare(a.month));
   }
 
-  function resumenMesesConCategoriasPersona(grupos) {
+  function resumenMesesConCategoriasPersona(grupos, lado) {
     if (grupos.length === 0) return '';
     return `
       <div class="persona__por-mes">
@@ -2019,16 +2021,25 @@
               grupo.categorias.length > 0
                 ? `<div class="persona__por-categoria persona__por-categoria--anidada">
                      ${grupo.categorias
-                       .map(
-                         (cat) => `
-                     <div class="persona__categoria-fila persona__categoria-fila--anidada">
+                       .map((cat) => {
+                         const activo =
+                           personaDetalleDesglose?.lado === lado &&
+                           personaDetalleDesglose.mes === grupo.month &&
+                           personaDetalleDesglose.categoria === cat.categoryId;
+                         return `
+                     <button type="button"
+                             class="persona__categoria-fila persona__categoria-fila--anidada persona__categoria-fila--clic"
+                             data-persona-desglose-categoria="${escapar(cat.categoryId)}"
+                             data-persona-desglose-mes="${escapar(grupo.month)}"
+                             data-persona-desglose-lado="${lado}"
+                             aria-pressed="${activo ? 'true' : 'false'}">
                        <span class="persona__categoria-etiqueta">
                          <i class="categoria__mecha" style="background:${colorCategoria(cat.categoryId)}"></i>
                          ${escapar(nombreCategoria(cat.categoryId))}
                        </span>
                        <span class="persona__categoria-monto cifra">${plata(cat.totalCents)}</span>
-                     </div>`,
-                       )
+                     </button>`;
+                       })
                        .join('')}
                    </div>`
                 : ''
@@ -2037,6 +2048,26 @@
           )
           .join('')}
       </div>`;
+  }
+
+  function pistaDesglosePersona(lado) {
+    if (!personaDetalleDesglose || personaDetalleDesglose.lado !== lado) return '';
+    return `<p class="pista persona__desglose-activo">
+              ${escapar(nombreCategoria(personaDetalleDesglose.categoria))}
+              · ${escapar(nombreMes(personaDetalleDesglose.mes))}
+              <button type="button" class="boton boton--fantasma boton--chico" data-quitar-desglose-persona>
+                Ver todos
+              </button>
+            </p>`;
+  }
+
+  function filtrarItemsDesglosePersona(items, lado, fechaDe, categoriaDe) {
+    if (!personaDetalleDesglose || personaDetalleDesglose.lado !== lado) return items;
+    const { mes, categoria } = personaDetalleDesglose;
+    return items.filter((item) => {
+      if (M.monthKeyOf(fechaDe(item), OFFSET) !== mes) return false;
+      return (categoriaDe(item) ?? 'sin-categoria') === categoria;
+    });
   }
 
   function categoriaDeDeuda(deuda) {
@@ -2109,6 +2140,21 @@
       (deuda) => deuda.amountCents,
     );
 
+    const itemsCobrarLista = filtrarItemsDesglosePersona(
+      itemsCobrarVisibles,
+      'cobrar',
+      (item) => item.occurredAt,
+      (item) => item.categoryId,
+    );
+    const itemsPagarLista = filtrarItemsDesglosePersona(
+      itemsPagarVisibles,
+      'pagar',
+      (deuda) => deuda.occurredAt,
+      categoriaDeDeuda,
+    );
+    const desgloseCobrar = personaDetalleDesglose?.lado === 'cobrar';
+    const desglosePagar = personaDetalleDesglose?.lado === 'pagar';
+
     const pendientesCobrar = (cuenta?.items ?? []).filter(
       (item) => !item.isSettled && item.pendingCents > 0,
     );
@@ -2143,15 +2189,18 @@
                </div>
                ${botonCobrarTodo}
              </div>
-             ${resumenMesesConCategoriasPersona(porMesCobrar)}
+             ${resumenMesesConCategoriasPersona(porMesCobrar, 'cobrar')}
+             ${pistaDesglosePersona('cobrar')}
              <div class="persona__bloque-lista">
                ${
-                 itemsCobrarVisibles.length > 0
-                   ? itemsCobrarVisibles.map((item) => filaDeudaCobrar(item, persona)).join('')
+                 itemsCobrarLista.length > 0
+                   ? itemsCobrarLista.map((item) => filaDeudaCobrar(item, persona)).join('')
                    : `<p class="persona__bloque-vacio">${
-                       filtradoMes
-                         ? 'Sin gastos compartidos en este mes.'
-                         : 'Sin gastos compartidos pendientes.'
+                       desgloseCobrar
+                         ? 'Sin gastos en esta categoría.'
+                         : filtradoMes
+                           ? 'Sin gastos compartidos en este mes.'
+                           : 'Sin gastos compartidos pendientes.'
                      }</p>`
                }
                ${
@@ -2175,13 +2224,18 @@
                </div>
                ${botonPagarTodo}
              </div>
-             ${resumenMesesConCategoriasPersona(porMesPagar)}
+             ${resumenMesesConCategoriasPersona(porMesPagar, 'pagar')}
+             ${pistaDesglosePersona('pagar')}
              <div class="persona__bloque-lista">
                ${
-                 itemsPagarVisibles.length > 0
-                   ? itemsPagarVisibles.map((deuda) => filaDeudaPagar(deuda)).join('')
+                 itemsPagarLista.length > 0
+                   ? itemsPagarLista.map((deuda) => filaDeudaPagar(deuda)).join('')
                    : `<p class="persona__bloque-vacio">${
-                       filtradoMes ? 'Sin deudas en este mes.' : 'Sin deudas pendientes.'
+                       desglosePagar
+                         ? 'Sin deudas en esta categoría.'
+                         : filtradoMes
+                           ? 'Sin deudas en este mes.'
+                           : 'Sin deudas pendientes.'
                      }</p>`
                }
              </div>
@@ -4339,6 +4393,31 @@
     if (filtroMesPersonas) {
       const valor = filtroMesPersonas.dataset.filtroPersonasMes;
       filtroPersonasMes = valor === 'todo' ? null : valor;
+      personaDetalleDesglose = null;
+      pintar();
+      return;
+    }
+
+    const desgloseCategoria = objetivo.closest('[data-persona-desglose-categoria]');
+    if (desgloseCategoria) {
+      const mes = desgloseCategoria.dataset.personaDesgloseMes;
+      const categoria = desgloseCategoria.dataset.personaDesgloseCategoria;
+      const lado = desgloseCategoria.dataset.personaDesgloseLado;
+      if (
+        personaDetalleDesglose?.mes === mes &&
+        personaDetalleDesglose?.categoria === categoria &&
+        personaDetalleDesglose?.lado === lado
+      ) {
+        personaDetalleDesglose = null;
+      } else {
+        personaDetalleDesglose = { mes, categoria, lado };
+      }
+      pintar();
+      return;
+    }
+
+    if (objetivo.closest('[data-quitar-desglose-persona]')) {
+      personaDetalleDesglose = null;
       pintar();
       return;
     }
@@ -4348,6 +4427,7 @@
       if (pestana.dataset.vista !== 'personas') {
         agregandoPersona = false;
         personaDetalle = null;
+        personaDetalleDesglose = null;
         correoPersonaEditando = null;
         dialogoCorreoPersona.close();
       }
@@ -4364,6 +4444,7 @@
       if (ir.dataset.ir !== 'personas') {
         agregandoPersona = false;
         personaDetalle = null;
+        personaDetalleDesglose = null;
         correoPersonaEditando = null;
         dialogoCorreoPersona.close();
       }
@@ -4407,6 +4488,9 @@
 
     const verPersona = objetivo.closest('[data-ver-persona]');
     if (verPersona) {
+      if (personaDetalle !== verPersona.dataset.verPersona) {
+        personaDetalleDesglose = null;
+      }
       personaDetalle = verPersona.dataset.verPersona;
       pintar();
       return;
@@ -4414,6 +4498,7 @@
 
     if (objetivo.closest('[data-volver-personas]')) {
       personaDetalle = null;
+      personaDetalleDesglose = null;
       pintar();
       return;
     }

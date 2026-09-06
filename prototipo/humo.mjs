@@ -195,6 +195,19 @@ comprobar(
   doc.querySelector('.persona__por-categoria--anidada') !== null,
 );
 comprobar('te debe desglosado por mes en el detalle', doc.querySelector('.persona__mes-grupo') !== null);
+const categoriaDesglose = doc.querySelector('[data-persona-desglose-categoria]');
+comprobar('las categorías del desglose se pueden tocar', categoriaDesglose !== null);
+const deudasAntes = doc.querySelectorAll('.persona__bloque--cobrar .deuda').length;
+clic('[data-persona-desglose-categoria]');
+comprobar(
+  'al tocar una categoría filtra los gastos debajo',
+  doc.querySelector('[data-persona-desglose-categoria][aria-pressed="true"]') !== null,
+);
+comprobar(
+  'la lista se acota a esa categoría',
+  doc.querySelectorAll('.persona__bloque--cobrar .deuda').length <= deudasAntes,
+);
+comprobar('ofrece volver a ver todos los gastos', doc.querySelector('[data-quitar-desglose-persona]') !== null);
 const detalleAna = doc.querySelector('#lienzo .persona--detalle');
 comprobar(
   'el monto que te deben no se repite en el detalle de Ana',
