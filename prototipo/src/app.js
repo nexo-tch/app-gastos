@@ -180,6 +180,23 @@
     const hayAlgoQueMandar = (cambios) =>
       Object.values(cambios).some((c) => c.puestos.length > 0 || c.quitados.length > 0);
 
+    /** Filas que existen aquí pero el servidor aún no conoce. */
+    function anexarLocalFaltante(base, local) {
+      if (!local) return base;
+      const fusionado = JSON.parse(JSON.stringify(base));
+      for (const { nombre } of COLECCIONES) {
+        const ids = new Set((fusionado[nombre] ?? []).map((f) => f.id));
+        for (const fila of local[nombre] ?? []) {
+          if (!ids.has(fila.id)) fusionado[nombre].push(fila);
+        }
+      }
+      fusionado.presupuestos ??= {};
+      for (const [claveMes, presu] of Object.entries(local.presupuestos ?? {})) {
+        if (!(claveMes in fusionado.presupuestos)) fusionado.presupuestos[claveMes] = presu;
+      }
+      return fusionado;
+    }
+
     /**
      * El receptor puede aceptar en el servidor mientras aquí el reparto sigue
      * sin `acceptedAt`. Si subimos ese null, le quitamos el estado al emisor.
@@ -242,7 +259,9 @@
           // Otro dispositivo escribio primero. Se toma lo del servidor en vez
           // de pisarlo: perder un cambio a ciegas es peor que rehacerlo.
           const cuerpo = await respuesta.json();
-          adoptar(cuerpo.datos, cuerpo.revision);
+          const fusionado = anexarLocalFaltante(cuerpo.datos, vigente);
+          adoptar(fusionado, cuerpo.revision);
+          programar(0);
           avisar('Otro dispositivo tenia cambios más nuevos. Recargué lo que hay en tu cuenta.');
           return;
         }
@@ -418,8 +437,15 @@
 
         const cuerpo = await respuesta.json();
         sesionActiva = true;
-        if (cuerpo.revision !== revision || firma(cuerpo.datos) !== firma(confirmado)) {
-          adoptar(cuerpo.datos, cuerpo.revision);
+        const servidorDiferente =
+          cuerpo.revision !== revision || firma(cuerpo.datos) !== firma(confirmado);
+        if (servidorDiferente) {
+          // Si aquí hay algo que todavía no subió, no pisarlo con el servidor.
+          if (vigente && firma(vigente) !== firma(confirmado)) {
+            programar(0);
+          } else {
+            adoptar(cuerpo.datos, cuerpo.revision);
+          }
         }
         await cargarNotificaciones();
       } catch (error) {
