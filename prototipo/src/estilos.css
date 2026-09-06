@@ -984,15 +984,45 @@ button.categoria.categoria--clic:focus-visible {
 
 .medio {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(120px, auto) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 13px 14px;
+  gap: 8px;
+  padding: 0;
   border-top: 1px solid var(--borde);
 }
 
 .medio:first-child {
   border-top: 0;
+}
+
+.medio__principal {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, auto);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 14px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.medio__principal:hover {
+  background: var(--superficie-2);
+}
+
+.medio__principal:active {
+  background: var(--superficie-3);
+}
+
+.medio__acciones {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-right: 10px;
 }
 
 .medio__nombre {

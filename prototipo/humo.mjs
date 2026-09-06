@@ -94,8 +94,8 @@ comprobar(
   'al tocar una categoría abre Gastos filtrados',
   doc.querySelector('.pestana[data-vista="gastos"]').getAttribute('aria-current') === 'page',
 );
-comprobar('el filtro ofrece volver a ver todos', doc.querySelector('[data-quitar-filtro-categoria]') !== null);
-clic('[data-quitar-filtro-categoria]');
+comprobar('el filtro ofrece volver a ver todos', doc.querySelector('[data-quitar-filtros-gastos]') !== null);
+clic('[data-quitar-filtros-gastos]');
 comprobar('quitar filtro vuelve a ver todos los gastos', texto('#lienzo').includes('Gastos de'));
 clic('.pestana[data-vista="resumen"]');
 comprobar('aparece historial por categoría', texto('#lienzo').includes('Historial por categoría'));
@@ -464,6 +464,14 @@ comprobar('el tope por categoría se guarda', guardado().presupuestos[mesActual(
 
 comprobar('lista los medios de pago', texto('#lienzo').includes('Medios de pago'));
 comprobar('muestra el gasto del mes por medio', doc.querySelector('.medio__mes') !== null);
+clic('[data-ver-medio="debito"]');
+comprobar(
+  'al tocar un medio abre Gastos filtrados',
+  doc.querySelector('.pestana[data-vista="gastos"]').getAttribute('aria-current') === 'page',
+);
+comprobar('el filtro por medio ofrece volver a ver todos', doc.querySelector('[data-quitar-filtros-gastos]') !== null);
+clic('[data-quitar-filtros-gastos]');
+clic('.pestana[data-vista="presupuesto"]');
 const mediosAntes = guardado().cuentas.length;
 
 clic('[data-abrir="medio"]');

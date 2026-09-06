@@ -741,6 +741,7 @@
   let correoPersonaEditando = null;
   let rangoCategorias = 6;
   let filtroCategoria = null;
+  let filtroMedio = null;
   let filtroPersonasMes = null;
   /** En detalle de persona: categoría elegida en el desglose. */
   let personaDetalleDesglose = null;
@@ -1503,35 +1504,48 @@
   /* ══ Vista: gastos ═══════════════════════════════════════════════ */
 
   function vistaGastos() {
-    const lista = gastosDelMes(mes).filter(
-      (g) => !filtroCategoria || g.categoryId === filtroCategoria,
-    );
-    const filtrando = Boolean(filtroCategoria);
+    const filtrando = Boolean(filtroCategoria || filtroMedio);
     const tituloMes = nombreMes(mes);
+    const lista = gastosDelMes(mes).filter((g) => {
+      if (filtroCategoria && g.categoryId !== filtroCategoria) return false;
+      if (filtroMedio && g.accountId !== filtroMedio) return false;
+      return true;
+    });
+
+    const tituloGastos = (() => {
+      const partes = [];
+      if (filtroCategoria) partes.push(nombreCategoria(filtroCategoria));
+      if (filtroMedio) partes.push(cuentaPorId(filtroMedio)?.name ?? 'Medio');
+      if (partes.length > 0) partes.push(tituloMes);
+      return partes.length > 0 ? partes.join(' · ') : `Gastos de ${tituloMes}`;
+    })();
+
+    const vacioGastos = (() => {
+      if (filtroCategoria && filtroMedio) {
+        return `Sin gastos de ${nombreCategoria(filtroCategoria)} con ${cuentaPorId(filtroMedio)?.name ?? 'ese medio'} este mes`;
+      }
+      if (filtroCategoria) return `Sin gastos de ${nombreCategoria(filtroCategoria)} este mes`;
+      if (filtroMedio) {
+        return `Sin gastos con ${cuentaPorId(filtroMedio)?.name ?? 'ese medio'} este mes`;
+      }
+      return 'Este mes está en blanco';
+    })();
 
     if (lista.length === 0) {
       return `
         <section class="bloque">
           <div class="bloque__cabeza">
-            <h2>${
-              filtrando
-                ? `${escapar(nombreCategoria(filtroCategoria))} · ${escapar(tituloMes)}`
-                : `Gastos de ${escapar(tituloMes)}`
-            }</h2>
+            <h2>${escapar(tituloGastos)}</h2>
             ${
               filtrando
-                ? `<button type="button" class="boton boton--fantasma boton--chico" data-quitar-filtro-categoria>
+                ? `<button type="button" class="boton boton--fantasma boton--chico" data-quitar-filtros-gastos>
                      Ver todos
                    </button>`
                 : ''
             }
           </div>
           <div class="vacio">
-            <strong>${
-              filtrando
-                ? `Sin gastos de ${escapar(nombreCategoria(filtroCategoria))} este mes`
-                : 'Este mes está en blanco'
-            }</strong>
+            <strong>${escapar(vacioGastos)}</strong>
             ${filtrando ? 'Prueba otro mes o quita el filtro.' : 'Registra un gasto y aparecerá aquí, agrupado por día.'}
           </div>
         </section>`;
@@ -1550,16 +1564,12 @@
       <section class="bloque">
         <div class="bloque__cabeza">
           <div>
-            <h2>${
-              filtrando
-                ? `${escapar(nombreCategoria(filtroCategoria))} · ${escapar(tituloMes)}`
-                : `Gastos de ${escapar(tituloMes)}`
-            }</h2>
+            <h2>${escapar(tituloGastos)}</h2>
             <span class="rotulo">${lista.length} movimientos · ${plata(total)} tuyos</span>
           </div>
           ${
             filtrando
-              ? `<button type="button" class="boton boton--fantasma boton--chico" data-quitar-filtro-categoria>
+              ? `<button type="button" class="boton boton--fantasma boton--chico" data-quitar-filtros-gastos>
                    Ver todos
                  </button>`
               : ''
@@ -1633,8 +1643,7 @@
           </button>
         </div>
         <p class="pista">
-          Tarjetas, billeteras y efectivo con el nombre que tú uses. Al registrar un gasto o una deuda
-          eliges cuál usaste; aquí ves cuánto ha pasado por cada uno este mes (solo tu parte).
+          Tarjetas, billeteras y efectivo con el nombre que tú uses. Toca uno para ver sus gastos del mes.
         </p>
         <div class="tarjeta">
           ${datos.cuentas
@@ -1644,21 +1653,24 @@
               const porcentaje = totalMediosMes > 0 ? Math.round((gastado / totalMediosMes) * 100) : 0;
               return `
               <div class="medio">
-                <div class="medio__nombre">
-                  <span>${escapar(medio.name)}</span>
-                  <span class="medio__tipo">${escapar(nombreTipoMedio(medio.kind))}</span>
-                </div>
-                <div class="medio__mes">
-                  <span class="medio__gastado cifra">${plata(gastado)}</span>
-                  <span class="medio__detalle">${escapar(detalleMedioDelMes(gastado, movimientos, totalMediosMes))}</span>
-                  ${
-                    gastado > 0 && totalMediosMes > 0
-                      ? `<div class="medidor medio__medidor">
-                           <span class="medidor__relleno" style="width:${porcentaje}%"></span>
-                         </div>`
-                      : ''
-                  }
-                </div>
+                <button type="button" class="medio__principal" data-ver-medio="${medio.id}"
+                        aria-label="Ver gastos con ${escapar(medio.name)}">
+                  <div class="medio__nombre">
+                    <span>${escapar(medio.name)}</span>
+                    <span class="medio__tipo">${escapar(nombreTipoMedio(medio.kind))}</span>
+                  </div>
+                  <div class="medio__mes">
+                    <span class="medio__gastado cifra">${plata(gastado)}</span>
+                    <span class="medio__detalle">${escapar(detalleMedioDelMes(gastado, movimientos, totalMediosMes))}</span>
+                    ${
+                      gastado > 0 && totalMediosMes > 0
+                        ? `<div class="medidor medio__medidor">
+                             <span class="medidor__relleno" style="width:${porcentaje}%"></span>
+                           </div>`
+                        : ''
+                    }
+                  </div>
+                </button>
                 <div class="medio__acciones">
                   <button type="button" class="icono icono--mini" data-editar-medio="${medio.id}"
                           aria-label="Editar ${escapar(medio.name)}">✎</button>
@@ -4720,8 +4732,18 @@
       }
       if (ir.dataset.ir === 'gastos') {
         filtroCategoria = null;
+        filtroMedio = null;
       }
       vista = ir.dataset.ir;
+      pintar();
+      return;
+    }
+
+    const verMedio = objetivo.closest('[data-ver-medio]');
+    if (verMedio) {
+      filtroMedio = verMedio.dataset.verMedio;
+      filtroCategoria = null;
+      vista = 'gastos';
       pintar();
       return;
     }
@@ -4729,13 +4751,22 @@
     const verCategoria = objetivo.closest('[data-ver-categoria]');
     if (verCategoria) {
       filtroCategoria = verCategoria.dataset.verCategoria;
+      filtroMedio = null;
       vista = 'gastos';
+      pintar();
+      return;
+    }
+
+    if (objetivo.closest('[data-quitar-filtros-gastos]')) {
+      filtroCategoria = null;
+      filtroMedio = null;
       pintar();
       return;
     }
 
     if (objetivo.closest('[data-quitar-filtro-categoria]')) {
       filtroCategoria = null;
+      filtroMedio = null;
       pintar();
       return;
     }
