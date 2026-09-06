@@ -2505,7 +2505,7 @@
                ${botonCobrarTodo}
              </div>
              ${resumenCategoriasPlano(porCategoriaCobrarFlat, 'cobrar')}
-             ${resumenMesesConCategoriasPersona(porMesCobrar, 'cobrar')}
+             ${filtradoMes ? resumenMesesConCategoriasPersona(porMesCobrar, 'cobrar') : ''}
              ${pistaDesglosePersona('cobrar')}
              <div class="persona__bloque-lista">
                ${
@@ -2541,7 +2541,7 @@
                ${botonPagarTodo}
              </div>
              ${resumenCategoriasPlano(porCategoriaPagarFlat, 'pagar')}
-             ${resumenMesesConCategoriasPersona(porMesPagar, 'pagar')}
+             ${filtradoMes ? resumenMesesConCategoriasPersona(porMesPagar, 'pagar') : ''}
              ${pistaDesglosePersona('pagar')}
              <div class="persona__bloque-lista">
                ${

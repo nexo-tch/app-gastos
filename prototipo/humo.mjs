@@ -205,14 +205,17 @@ clic(`[data-ver-persona="${ana.id}"]`);
 comprobar('el detalle de persona mantiene tablero lite', doc.getElementById('tablero').dataset.modo === 'lite');
 comprobar('el detalle no muestra filtro de categoría', doc.getElementById('filtro-personas-categoria') === null);
 comprobar(
-  'te debe desglosado por categoría dentro de cada mes',
-  doc.querySelector('.persona__por-categoria--anidada') !== null,
-);
-comprobar(
   'el detalle muestra resumen plano por categoría',
   doc.querySelector('.persona__por-categoria--flat') !== null,
 );
-comprobar('te debe desglosado por mes en el detalle', doc.querySelector('.persona__mes-grupo') !== null);
+comprobar(
+  'con Todos no muestra desglose por mes',
+  doc.querySelector('.persona__mes-grupo') === null,
+);
+comprobar(
+  'con Todos no anida categorías por mes',
+  doc.querySelector('.persona__por-categoria--anidada') === null,
+);
 const categoriaDesglose = doc.querySelector('[data-persona-desglose-categoria]');
 comprobar('las categorías del desglose se pueden tocar', categoriaDesglose !== null);
 const deudasAntes = doc.querySelectorAll('.persona__bloque--cobrar .deuda').length;
