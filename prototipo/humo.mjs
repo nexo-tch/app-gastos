@@ -172,7 +172,7 @@ clic('.pestana[data-vista="resumen"]');
 clic('.pestana[data-vista="personas"]');
 comprobar('la vista de personas lista a Ana', texto('#lienzo').includes('Ana'));
 comprobar('Personas ofrece filtros de mes', doc.querySelector('.personas-filtros') !== null);
-comprobar('Personas ofrece filtro de categoría', doc.getElementById('filtro-personas-categoria') !== null);
+comprobar('Personas no muestra filtro de categoría en la lista', doc.getElementById('filtro-personas-categoria') === null);
 comprobar(
   'Personas arranca sin filtros',
   doc.querySelector('[data-filtro-personas-mes="todo"][aria-pressed="true"]') !== null,
@@ -189,6 +189,7 @@ comprobar(
 const ana = guardado().personas.find((p) => p.name === 'Ana');
 clic(`[data-ver-persona="${ana.id}"]`);
 comprobar('el detalle de persona mantiene tablero lite', doc.getElementById('tablero').dataset.modo === 'lite');
+comprobar('el detalle ofrece filtro de categoría', doc.getElementById('filtro-personas-categoria') !== null);
 comprobar(
   'te debe desglosado por categoría en el detalle',
   doc.querySelector('.persona__por-categoria') !== null,

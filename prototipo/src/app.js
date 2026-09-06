@@ -1767,17 +1767,16 @@
     return [...meses].sort((a, b) => b.localeCompare(a));
   }
 
-  function categoriasParaFiltroPersonas() {
+  function categoriasParaFiltroPersona(idPersona) {
     const ids = new Set();
-    const cuentas = porCobrar();
-    for (const persona of cuentas.byPerson) {
-      for (const item of persona.items) {
-        if (itemCobrarFiltrado(item, filtroPersonasMes, null) && item.categoryId) {
-          ids.add(item.categoryId);
-        }
+    const cuenta = porCobrar().byPerson.find((p) => p.personId === idPersona);
+    for (const item of cuenta?.items ?? []) {
+      if (itemCobrarFiltrado(item, filtroPersonasMes, null) && item.categoryId) {
+        ids.add(item.categoryId);
       }
     }
     for (const deuda of datos.deudas) {
+      if (deuda.personId !== idPersona) continue;
       if (itemPagarFiltrado(deuda, filtroPersonasMes, null)) {
         const id = categoriaDeDeuda(deuda);
         if (id) ids.add(id);
@@ -1789,6 +1788,10 @@
       .sort((a, b) => a.name.localeCompare(b.name, 'es'));
   }
 
+  function etiquetaFiltroPersonasMes() {
+    return filtroPersonasMes ? nombreMes(filtroPersonasMes) : '';
+  }
+
   function etiquetaFiltroPersonas() {
     const partes = [];
     if (filtroPersonasMes) partes.push(nombreMes(filtroPersonasMes));
@@ -1798,12 +1801,10 @@
     return partes.join(' · ');
   }
 
-  function filtrosPersonas() {
+  function filtrosPersonasMes() {
     const meses = mesesParaFiltroPersonas();
-    const categorias = categoriasParaFiltroPersonas();
 
     return `
-      <div class="personas-filtros">
         <div class="personas-filtros__grupo">
           <span class="personas-filtros__etiqueta">Mes</span>
           <div class="segmentos segmentos--bloque personas-filtros__segmentos" role="group" aria-label="Filtrar por mes">
@@ -1821,7 +1822,22 @@
               )
               .join('')}
           </div>
-        </div>
+        </div>`;
+  }
+
+  function filtrosPersonasLista() {
+    return `
+      <div class="personas-filtros">
+        ${filtrosPersonasMes()}
+      </div>`;
+  }
+
+  function filtrosPersonaDetalle(idPersona) {
+    const categorias = categoriasParaFiltroPersona(idPersona);
+
+    return `
+      <div class="personas-filtros">
+        ${filtrosPersonasMes()}
         <label class="campo personas-filtros__categoria">
           <span class="campo__etiqueta">Categoría</span>
           <select class="entrada" id="filtro-personas-categoria">
@@ -1845,17 +1861,16 @@
     const cuentas = porCobrar();
     const mias = porPagar();
     const mesFiltro = filtroPersonasMes;
-    const catFiltro = filtroPersonasCategoria;
 
     const filas = datos.personas
       .map((persona) => {
         const cuenta = cuentas.byPerson.find((p) => p.personId === persona.id);
         const mio = mias.byPerson.find((p) => p.personId === persona.id);
-        const { cobrar, pagar, neto } = montosPersonaFiltrados(cuenta, mio, mesFiltro, catFiltro);
+        const { cobrar, pagar, neto } = montosPersonaFiltrados(cuenta, mio, mesFiltro, null);
         return { persona, cuenta, mio, cobrar, pagar, neto };
       })
       .filter(({ cobrar, pagar, neto }) =>
-        hayFiltroPersonas() ? cobrar > 0 || pagar > 0 || neto !== 0 : true,
+        mesFiltro ? cobrar > 0 || pagar > 0 || neto !== 0 : true,
       );
 
     const totalCobrar = filas.reduce((s, f) => s + f.cobrar, 0);
@@ -1866,13 +1881,13 @@
         <div class="bloque__cabeza">
           <h2>Personas</h2>
           ${
-            hayFiltroPersonas()
-              ? `<span class="rotulo">${escapar(etiquetaFiltroPersonas())}</span>`
+            mesFiltro
+              ? `<span class="rotulo">${escapar(etiquetaFiltroPersonasMes())}</span>`
               : ''
           }
         </div>
 
-        ${filtrosPersonas()}
+        ${filtrosPersonasLista()}
 
         <div class="personas-alta">
           <button type="button" class="boton boton--marco" data-mostrar-nueva-persona ${agregandoPersona ? 'hidden' : ''}>
@@ -1890,7 +1905,7 @@
         </div>
 
         ${
-          hayFiltroPersonas() && (totalCobrar > 0 || totalPagar > 0)
+          mesFiltro && (totalCobrar > 0 || totalPagar > 0)
             ? `<p class="pista personas-filtros__resumen">
                  ${
                    totalCobrar > 0
@@ -1913,8 +1928,8 @@
                </div>`
             : filas.length === 0
               ? `<div class="vacio">
-                   <strong>Sin movimientos con estos filtros</strong>
-                   Prueba otro mes o categoría.
+                   <strong>Sin movimientos con este mes</strong>
+                   Prueba otro mes.
                  </div>`
               : `<div class="tarjeta">
                    ${filas
@@ -1949,7 +1964,7 @@
         };
       })();
 
-    const filtrado = hayFiltroPersonas();
+    const filtrado = montos ? filtroPersonasMes !== null : hayFiltroPersonas();
 
     let montoDerecha = '';
     let signoNeto = 'cero';
@@ -2017,7 +2032,7 @@
             }
           </div>
         </div>
-        ${filtrosPersonas()}
+        ${filtrosPersonaDetalle(persona.id)}
         ${detallePersona(persona, cuentas, mias)}
       </section>`;
   }
@@ -4464,6 +4479,9 @@
 
     const verPersona = objetivo.closest('[data-ver-persona]');
     if (verPersona) {
+      if (personaDetalle !== verPersona.dataset.verPersona) {
+        filtroPersonasCategoria = null;
+      }
       personaDetalle = verPersona.dataset.verPersona;
       pintar();
       return;
@@ -4471,6 +4489,7 @@
 
     if (objetivo.closest('[data-volver-personas]')) {
       personaDetalle = null;
+      filtroPersonasCategoria = null;
       pintar();
       return;
     }
