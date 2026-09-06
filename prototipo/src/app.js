@@ -2056,7 +2056,7 @@
   }
 
   function filaPersonaResumen(persona, cuenta, mio, montos) {
-    const { cobrar, pagar, neto } =
+    const { cobrar, pagar } =
       montos ??
       (() => {
         const balance = netoBalancePersona(cuenta, mio, null);
@@ -2064,14 +2064,15 @@
       })();
 
     const filtrado = false;
+    const netoVisible = cobrar - pagar;
 
     let montoDerecha = '';
     let signoNeto = 'cero';
-    if (neto > 0) {
-      montoDerecha = plata(neto);
+    if (netoVisible > 0) {
+      montoDerecha = plata(netoVisible);
       signoNeto = 'favor';
-    } else if (neto < 0) {
-      montoDerecha = plata(-neto);
+    } else if (netoVisible < 0) {
+      montoDerecha = plata(-netoVisible);
       signoNeto = 'pago';
     }
 
