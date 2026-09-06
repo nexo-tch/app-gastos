@@ -607,6 +607,10 @@
   const id = () => Math.random().toString(36).slice(2, 11) + Date.now().toString(36).slice(-4);
   const ahora = () => new Date().toISOString();
   const plata = (centavos) => M.formatMoney(centavos, { currency: 'COP' });
+  const plataUsd = (centavos) => M.formatMoney(centavos, { currency: 'USD', locale: 'en-US' });
+  const monedaPasivo = (pasivo) => pasivo?.currency ?? 'COP';
+  const plataPasivo = (pasivo, centavos = pasivo?.balanceCents ?? 0) =>
+    monedaPasivo(pasivo) === 'USD' ? plataUsd(centavos) : plata(centavos);
   const normalizarCorreo = (correo) => String(correo ?? '').trim().toLowerCase();
 
   const escapar = (texto) =>
@@ -782,10 +786,39 @@
     payment: 'Abono',
   };
 
-  const totalPasivosTarjetasCreditos = () =>
-    datos.pasivos
-      .filter((p) => p.kind === 'card' || p.kind === 'loan')
-      .reduce((s, p) => s + Math.max(0, p.balanceCents), 0);
+  const totalPasivosTarjetasCreditos = () => totalesPasivos((p) => p.kind === 'card' || p.kind === 'loan');
+
+  function totalesPasivos(filtro = () => true) {
+    return datos.pasivos.reduce(
+      (acc, pasivo) => {
+        if (!filtro(pasivo)) return acc;
+        const saldo = Math.max(0, pasivo.balanceCents ?? 0);
+        if (saldo <= 0) return acc;
+        if (monedaPasivo(pasivo) === 'USD') acc.usd += saldo;
+        else acc.cop += saldo;
+        return acc;
+      },
+      { cop: 0, usd: 0 },
+    );
+  }
+
+  function textoMontosPasivos(totales) {
+    const partes = [];
+    if (totales.cop > 0) partes.push(`<span class="cifra">${plata(totales.cop)}</span> COP`);
+    if (totales.usd > 0) partes.push(`<span class="cifra">${plataUsd(totales.usd)}</span> USD`);
+    return partes.join(' y ');
+  }
+
+  function textoDebesPasivos(totales, opciones = {}) {
+    const { sufijo = '', vacio = 'Sin deudas registradas' } = opciones;
+    const montos = textoMontosPasivos(totales);
+    if (!montos) return vacio;
+    return `Debes ${montos}${sufijo}`;
+  }
+
+  function haySaldoPasivos(totales) {
+    return totales.cop > 0 || totales.usd > 0;
+  }
 
   const movimientosDePasivo = (idPasivo) =>
     datos.pasivoMovimientos
@@ -2573,22 +2606,23 @@
   function vistaPasivos() {
     if (pasivoDetalle) return vistaPasivoDetalle(pasivoDetalle);
 
-    const tarjetasCreditos = totalPasivosTarjetasCreditos();
-    const total = datos.pasivos.reduce((s, p) => s + Math.max(0, p.balanceCents), 0);
+    const tarjetas = totalPasivosTarjetasCreditos();
+    const total = totalesPasivos();
     const lista = datos.pasivos;
 
     return `
       <section class="pasivos-resumen" aria-live="polite">
         ${
-          tarjetasCreditos > 0
-            ? `<p class="pasivos-resumen__titulo">Debes <span class="cifra">${plata(tarjetasCreditos)}</span> en tarjetas y créditos</p>`
-            : total > 0
-              ? `<p class="pasivos-resumen__titulo">Debes <span class="cifra">${plata(total)}</span> en total</p>`
+          haySaldoPasivos(tarjetas)
+            ? `<p class="pasivos-resumen__titulo">${textoDebesPasivos(tarjetas, { sufijo: ' en tarjetas y créditos' })}</p>`
+            : haySaldoPasivos(total)
+              ? `<p class="pasivos-resumen__titulo">${textoDebesPasivos(total, { sufijo: ' en total' })}</p>`
               : `<p class="pasivos-resumen__titulo pasivos-resumen__titulo--ok">Sin deudas registradas</p>`
         }
         ${
-          tarjetasCreditos > 0 && total > tarjetasCreditos
-            ? `<p class="pista">Incluyendo otras deudas: <b class="cifra">${plata(total)}</b> en total</p>`
+          haySaldoPasivos(tarjetas) &&
+          (total.cop > tarjetas.cop || total.usd > tarjetas.usd)
+            ? `<p class="pista">Incluyendo otras deudas: ${textoMontosPasivos(total)} en total</p>`
             : ''
         }
       </section>
@@ -2627,13 +2661,13 @@
                            <span>${escapar(pasivo.name)}</span>
                            <span class="rotulo">${escapar(ETIQUETAS_PASIVO[pasivo.kind] ?? pasivo.kind)}</span>
                          </div>
-                         <div class="categoria__cifra">${plata(pasivo.balanceCents)}</div>
+                         <div class="categoria__cifra">${plataPasivo(pasivo)}</div>
                          ${
                            uso !== null
                              ? `<div class="medidor">
                                   <span class="medidor__relleno" style="width:${uso}%"></span>
                                 </div>
-                                <div class="categoria__nota">${Math.round(uso)}% del cupo · ${plata(pasivo.limitCents)}</div>`
+                                <div class="categoria__nota">${Math.round(uso)}% del cupo · ${plataPasivo(pasivo, pasivo.limitCents)}</div>`
                              : enlace
                                ? `<div class="categoria__nota">${escapar(enlace)}</div>`
                                : ''
@@ -2671,7 +2705,7 @@
         </div>
         <p class="pista">
           ${escapar(ETIQUETAS_PASIVO[pasivo.kind] ?? pasivo.kind)} · Saldo actual
-          <b class="cifra">${plata(pasivo.balanceCents)}</b>
+          <b class="cifra">${plataPasivo(pasivo)}</b>
           ${pasivo.notes ? ` · ${escapar(pasivo.notes)}` : ''}
         </p>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
@@ -2693,8 +2727,8 @@
                    .map((mov) => {
                      const detalle =
                        mov.kind === 'payment' && mov.paymentCents
-                         ? `−${plata(mov.paymentCents)} · queda ${plata(mov.balanceAfterCents)}`
-                         : `Saldo ${plata(mov.balanceAfterCents)}`;
+                         ? `−${plataPasivo(pasivo, mov.paymentCents)} · queda ${plataPasivo(pasivo, mov.balanceAfterCents)}`
+                         : `Saldo ${plataPasivo(pasivo, mov.balanceAfterCents)}`;
                      return `
                        <div class="renglon">
                          <div class="renglon__cuerpo">
@@ -3210,6 +3244,24 @@
   const dialogoPasivoMov = document.getElementById('dialogo-pasivo-mov');
   let pasivoEditando = null;
 
+  function signoMonedaPasivo(moneda) {
+    return moneda === 'USD' ? 'US$' : '$';
+  }
+
+  function actualizarUiMonedaPasivo(moneda, opciones = {}) {
+    const { soloLectura = false } = opciones;
+    const signo = signoMonedaPasivo(moneda);
+    document.getElementById('pasivo-saldo-signo').textContent = signo;
+    document.getElementById('pasivo-cupo-signo').textContent = signo;
+    const selector = document.getElementById('pasivo-moneda');
+    selector.value = moneda;
+    selector.disabled = soloLectura;
+  }
+
+  function actualizarUiMonedaPasivoMov(moneda) {
+    document.getElementById('pasivo-mov-signo').textContent = signoMonedaPasivo(moneda);
+  }
+
   function rellenarSelectoresPasivo(pasivo = null) {
     const selectorCuenta = document.getElementById('pasivo-cuenta');
     selectorCuenta.innerHTML =
@@ -3235,6 +3287,7 @@
     document.getElementById('titulo-pasivo').textContent = pasivo ? 'Editar deuda' : 'Nueva deuda';
     document.getElementById('pasivo-nombre').value = pasivo?.name ?? '';
     document.getElementById('pasivo-tipo').value = pasivo?.kind ?? 'card';
+    actualizarUiMonedaPasivo(monedaPasivo(pasivo), { soloLectura: Boolean(pasivo) });
     document.getElementById('pasivo-saldo').value = textoDesdeCentavos(pasivo?.balanceCents ?? 0);
     document.getElementById('pasivo-saldo').readOnly = Boolean(pasivo);
     document.getElementById('pasivo-saldo-etiqueta').textContent = pasivo
@@ -3267,8 +3320,9 @@
       ? 'Cuánto abonaste'
       : 'Saldo según el banco';
     document.getElementById('pasivo-mov-pista').innerHTML = esAbono
-      ? `Saldo actual de <b>${escapar(pasivo.name)}</b>: <span class="cifra">${plata(pasivo.balanceCents)}</span>`
-      : `Reemplaza el saldo de <b>${escapar(pasivo.name)}</b> (hoy ${plata(pasivo.balanceCents)}).`;
+      ? `Saldo actual de <b>${escapar(pasivo.name)}</b>: <span class="cifra">${plataPasivo(pasivo)}</span>`
+      : `Reemplaza el saldo de <b>${escapar(pasivo.name)}</b> (hoy ${plataPasivo(pasivo)}).`;
+    actualizarUiMonedaPasivoMov(monedaPasivo(pasivo));
     document.getElementById('pasivo-mov-monto').value = esAbono
       ? ''
       : textoDesdeCentavos(pasivo.balanceCents);
@@ -5398,9 +5452,14 @@
     avisar(editando ? 'Fijo actualizado' : 'Fijo creado');
   });
 
+  document.getElementById('pasivo-moneda').addEventListener('change', (evento) => {
+    actualizarUiMonedaPasivo(evento.target.value === 'USD' ? 'USD' : 'COP');
+  });
+
   document.getElementById('forma-pasivo').addEventListener('submit', () => {
     const nombre = document.getElementById('pasivo-nombre').value.trim();
     const kind = document.getElementById('pasivo-tipo').value;
+    const currency = document.getElementById('pasivo-moneda').value === 'USD' ? 'USD' : 'COP';
     const saldo = centavosDesdeTexto(document.getElementById('pasivo-saldo').value);
     const cupoTexto = document.getElementById('pasivo-cupo').value.trim();
     const limitCents = cupoTexto ? centavosDesdeTexto(cupoTexto) : null;
@@ -5434,6 +5493,7 @@
           id: idPasivo,
           name: nombre,
           kind,
+          currency,
           balanceCents: saldo,
           limitCents: limitCents && limitCents > 0 ? limitCents : null,
           accountId,

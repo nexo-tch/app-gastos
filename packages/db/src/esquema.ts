@@ -285,6 +285,7 @@ export const pasivos = pgTable(
     nombre: text('nombre').notNull(),
     tipo: text('tipo').notNull(),
     saldo: integer('saldo').notNull().default(0),
+    moneda: text('moneda').notNull().default('COP'),
     cupo: integer('cupo'),
     cuentaId: text('cuenta_id'),
     personaId: text('persona_id'),

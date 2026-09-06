@@ -655,10 +655,18 @@
             </select>
           </label>
 
+          <label class="campo">
+            <span class="campo__etiqueta">Moneda</span>
+            <select class="entrada" id="pasivo-moneda">
+              <option value="COP">Pesos (COP)</option>
+              <option value="USD">Dólares (USD)</option>
+            </select>
+          </label>
+
           <label class="campo campo--monto">
             <span class="campo__etiqueta" id="pasivo-saldo-etiqueta">Saldo actual</span>
             <div class="monto">
-              <span class="monto__signo" aria-hidden="true">$</span>
+              <span class="monto__signo" id="pasivo-saldo-signo" aria-hidden="true">$</span>
               <input
                 class="monto__entrada"
                 id="pasivo-saldo"
@@ -673,7 +681,7 @@
           <label class="campo campo--monto">
             <span class="campo__etiqueta">Cupo (opcional)</span>
             <div class="monto">
-              <span class="monto__signo" aria-hidden="true">$</span>
+              <span class="monto__signo" id="pasivo-cupo-signo" aria-hidden="true">$</span>
               <input
                 class="monto__entrada"
                 id="pasivo-cupo"
@@ -732,7 +740,7 @@
           <label class="campo campo--monto" id="pasivo-mov-campo-monto">
             <span class="campo__etiqueta" id="pasivo-mov-monto-etiqueta">Cuánto abonaste</span>
             <div class="monto">
-              <span class="monto__signo" aria-hidden="true">$</span>
+              <span class="monto__signo" id="pasivo-mov-signo" aria-hidden="true">$</span>
               <input
                 class="monto__entrada"
                 id="pasivo-mov-monto"

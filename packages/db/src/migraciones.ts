@@ -86,4 +86,8 @@ export const MIGRACIONES: Migracion[] = [
       "CREATE INDEX \"pasivo_movimientos_pasivo_idx\" ON \"pasivo_movimientos\" USING btree (\"usuario_id\",\"pasivo_id\",\"creado_en\");",
     ],
   },
+  {
+    nombre: "0007_pasivos_moneda",
+    sentencias: ['ALTER TABLE "pasivos" ADD COLUMN "moneda" text DEFAULT \'COP\' NOT NULL;'],
+  },
 ];

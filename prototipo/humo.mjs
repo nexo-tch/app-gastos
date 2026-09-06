@@ -798,6 +798,23 @@ comprobar(
   guardado().pasivos.find((p) => p.name === 'Visa test')?.balanceCents === 2_000_000_00,
 );
 
+clic('[data-abrir="pasivo"]');
+doc.getElementById('pasivo-moneda').value = 'USD';
+doc.getElementById('pasivo-moneda').dispatchEvent(new window.Event('change', { bubbles: true }));
+doc.getElementById('pasivo-nombre').value = 'Préstamo USD';
+doc.getElementById('pasivo-saldo').value = '500';
+doc.getElementById('forma-pasivo').dispatchEvent(
+  new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+comprobar(
+  'registra una deuda en USD',
+  guardado().pasivos.find((p) => p.name === 'Préstamo USD')?.currency === 'USD',
+);
+comprobar(
+  'el resumen muestra COP y USD por separado',
+  texto('#lienzo').includes('COP') && texto('#lienzo').includes('USD'),
+);
+
 clic('.pestana[data-vista="resumen"]');
 comprobar('vuelve a mostrar el tablero', doc.getElementById('tablero').hidden === false);
 

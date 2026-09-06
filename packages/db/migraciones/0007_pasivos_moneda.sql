@@ -1,0 +1,1 @@
+ALTER TABLE "pasivos" ADD COLUMN "moneda" text DEFAULT 'COP' NOT NULL;
