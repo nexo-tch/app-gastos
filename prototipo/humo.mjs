@@ -171,7 +171,13 @@ clic('.pestana[data-vista="resumen"]');
 
 clic('.pestana[data-vista="personas"]');
 comprobar('la vista de personas lista a Ana', texto('#lienzo').includes('Ana'));
-comprobar('Personas muestra te deben del mes', texto('#lienzo').includes('Te deben en'));
+comprobar('Personas ofrece filtros de mes', doc.querySelector('.personas-filtros') !== null);
+comprobar('Personas ofrece filtro de categoría', doc.getElementById('filtro-personas-categoria') !== null);
+comprobar(
+  'Personas arranca filtrada por el mes actual',
+  doc.querySelector('[data-filtro-personas-mes][aria-pressed="true"]') !== null,
+);
+comprobar('Personas muestra totales del filtro', texto('#lienzo').includes('Te deben'));
 comprobar('Personas muestra tablero lite', doc.getElementById('tablero').dataset.modo === 'lite');
 comprobar('Personas sigue mostrando lo que queda', texto('#tablero').includes('Te queda para el mes'));
 comprobar('la lista de personas es compacta', doc.querySelector('.persona-fila') !== null);
@@ -183,6 +189,7 @@ comprobar(
 const ana = guardado().personas.find((p) => p.name === 'Ana');
 clic(`[data-ver-persona="${ana.id}"]`);
 comprobar('el detalle de persona mantiene tablero lite', doc.getElementById('tablero').dataset.modo === 'lite');
+clic('[data-filtro-personas-mes="todo"]');
 comprobar(
   'te debe desglosado por categoría en el detalle',
   doc.querySelector('.persona__por-categoria') !== null,

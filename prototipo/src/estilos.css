@@ -1098,6 +1098,48 @@ button.categoria.categoria--clic:focus-visible {
 
 /* ── Personas y deudas ──────────────────────────────────────────── */
 
+.personas-filtros {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.personas-filtros__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.personas-filtros__etiqueta {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--texto-3);
+}
+
+.personas-filtros__segmentos {
+  margin-bottom: 0;
+  flex-wrap: wrap;
+}
+
+.personas-filtros__categoria {
+  margin: 0;
+}
+
+.personas-filtros__categoria .entrada {
+  max-width: 220px;
+}
+
+.personas-filtros__resumen {
+  margin: 0 0 10px;
+}
+
 .persona-fila {
   display: flex;
   align-items: center;
