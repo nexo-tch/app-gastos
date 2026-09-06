@@ -230,6 +230,7 @@ comprobar(
   doc.querySelector(`[data-filtro-personas-mes="${mesPrueba}"][aria-pressed="true"]`) !== null,
 );
 comprobar('el detalle ofrece filtros de mes', doc.querySelector('.personas-filtros') !== null);
+comprobar('el detalle muestra balance neto del mes', doc.querySelector('.persona__balance') !== null);
 comprobar('el detalle de persona mantiene tablero lite', doc.getElementById('tablero').dataset.modo === 'lite');
 comprobar('el detalle no muestra filtro de categoría', doc.getElementById('filtro-personas-categoria') === null);
 comprobar(

@@ -1869,6 +1869,45 @@
     return { cobrar, pagar, neto: cobrar - pagar };
   }
 
+  function netoBalancePersona(cuenta, mio, mesFiltro) {
+    const { cobrar, pagar, neto } = montosPersonaFiltrados(cuenta, mio, mesFiltro, null);
+    const credito = mesFiltro === null ? (cuenta?.creditCents ?? 0) : 0;
+    return { cobrar, pagar, neto: neto - credito, credito };
+  }
+
+  function htmlBalancePersonaDetalle(cobrar, pagar, neto, opciones = {}) {
+    const { mesEtiqueta = null, credito = 0 } = opciones;
+    const prefijo = mesEtiqueta ? `En ${mesEtiqueta}, ` : 'En total, ';
+
+    let netoTexto = '';
+    if (neto > 0) {
+      netoTexto = `${prefijo}te debe <b class="cifra">${plata(neto)}</b>.`;
+    } else if (neto < 0) {
+      netoTexto = `${prefijo}le debes <b class="cifra">${plata(-neto)}</b>.`;
+    } else {
+      netoTexto = mesEtiqueta
+        ? `${prefijo}están a mano este mes.`
+        : 'Están a mano: no hay saldo pendiente entre ustedes.';
+    }
+
+    const partes = [];
+    if (cobrar > 0 && pagar > 0) {
+      partes.push(`Te debe ${plata(cobrar)}`);
+      partes.push(`Le debes ${plata(pagar)}`);
+    }
+    if (credito > 0 && !mesEtiqueta) partes.push(`${plata(credito)} a favor sin aplicar`);
+
+    return `
+      <div class="persona__balance">
+        <p class="persona__balance-neto">${netoTexto}</p>
+        ${
+          partes.length > 0
+            ? `<p class="persona__balance-detalle">${partes.join(' · ')}</p>`
+            : ''
+        }
+      </div>`;
+  }
+
   function mesesParaFiltroPersonas() {
     const meses = new Set([mes]);
     for (const reparto of datos.repartos) {
@@ -1934,7 +1973,7 @@
     const filas = datos.personas.map((persona) => {
       const cuenta = cuentas.byPerson.find((p) => p.personId === persona.id);
       const mio = mias.byPerson.find((p) => p.personId === persona.id);
-      const { cobrar, pagar, neto } = montosPersonaFiltrados(cuenta, mio, null, null);
+      const { cobrar, pagar, neto } = netoBalancePersona(cuenta, mio, mes);
       return { persona, cuenta, mio, cobrar, pagar, neto };
     });
 
@@ -1980,7 +2019,7 @@
     const partes = [];
     if (cobrar > 0) partes.push(`Te debe ${plata(cobrar)}`);
     if (pagar > 0) partes.push(`Le debes ${plata(pagar)}`);
-    if (partes.length === 0) return filtrado ? 'Sin movimientos con el filtro' : 'Al día';
+    if (partes.length === 0) return filtrado ? 'Sin movimientos este mes' : 'Al día';
     return partes.join(' · ');
   }
 
@@ -1988,17 +2027,11 @@
     const { cobrar, pagar, neto } =
       montos ??
       (() => {
-        const credito = cuenta?.creditCents ?? 0;
-        const pendienteCobrar = cuenta?.pendingCents ?? 0;
-        const pendientePagar = mio?.pendingCents ?? 0;
-        return {
-          cobrar: pendienteCobrar,
-          pagar: pendientePagar,
-          neto: pendienteCobrar - pendientePagar - credito,
-        };
+        const balance = netoBalancePersona(cuenta, mio, mes);
+        return balance;
       })();
 
-    const filtrado = false;
+    const filtrado = true;
 
     let montoDerecha = '';
     let signoNeto = 'cero';
@@ -2171,12 +2204,17 @@
     const mio = mias.byPerson.find((p) => p.personId === persona.id);
     const mesFiltro = filtroPersonasMes;
     const filtradoMes = mesFiltro !== null;
-    const { cobrar: pendienteCobrar, pagar: pendientePagar } = montosPersonaFiltrados(
-      cuenta,
-      mio,
-      mesFiltro,
-      null,
-    );
+    const {
+      cobrar: pendienteCobrar,
+      pagar: pendientePagar,
+      neto: netoBalance,
+      credito,
+    } = netoBalancePersona(cuenta, mio, mesFiltro);
+    const mesEtiqueta = filtradoMes ? nombreMes(mesFiltro) : null;
+    const balanceHtml = htmlBalancePersonaDetalle(pendienteCobrar, pendientePagar, netoBalance, {
+      mesEtiqueta,
+      credito,
+    });
 
     const itemsCobrarVisibles = filtradoMes
       ? [
@@ -2347,7 +2385,8 @@
           }
         </div>
 
-        ${bloqueCobrar || bloquePagar ? `<div class="persona__cuerpo">${bloqueCobrar}${bloquePagar}</div>` : `<p class="persona__bloque-vacio">Sin movimientos con ${escapar(persona.name)}.</p>`}
+        ${balanceHtml}
+        ${bloqueCobrar || bloquePagar ? `<div class="persona__cuerpo">${bloqueCobrar}${bloquePagar}</div>` : ''}
       </div>`;
   }
 
