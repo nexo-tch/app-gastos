@@ -94,6 +94,8 @@ comprobar(
   'al tocar una categoría abre Gastos filtrados',
   doc.querySelector('.pestana[data-vista="gastos"]').getAttribute('aria-current') === 'page',
 );
+comprobar('Gastos ofrece filtro de categoría', doc.getElementById('filtro-gastos-categoria') !== null);
+comprobar('Gastos ofrece filtro de medio', doc.getElementById('filtro-gastos-medio') !== null);
 comprobar('el filtro ofrece volver a ver todos', doc.querySelector('[data-quitar-filtros-gastos]') !== null);
 clic('[data-quitar-filtros-gastos]');
 comprobar('quitar filtro vuelve a ver todos los gastos', texto('#lienzo').includes('Gastos de'));

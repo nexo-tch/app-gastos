@@ -1501,24 +1501,92 @@
 
   const sinNada = (texto) => `<div class="vacio">${escapar(texto)}</div>`;
 
+  function categoriasEnGastosDelMes(clave) {
+    const ids = new Set();
+    for (const gasto of gastosDelMes(clave)) {
+      if (gasto.categoryId) ids.add(gasto.categoryId);
+    }
+    return [...ids]
+      .map((id) => categoriaPorId(id))
+      .filter(Boolean)
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  }
+
+  function mediosEnGastosDelMes(clave) {
+    const ids = new Set();
+    for (const gasto of gastosDelMes(clave)) {
+      if (gasto.accountId) ids.add(gasto.accountId);
+    }
+    return [...ids]
+      .map((id) => cuentaPorId(id))
+      .filter(Boolean)
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  }
+
+  function filtrosGastos() {
+    const categorias = categoriasEnGastosDelMes(mes);
+    const medios = mediosEnGastosDelMes(mes);
+
+    return `
+      <div class="gastos-filtros">
+        <label class="campo gastos-filtros__campo">
+          <span class="campo__etiqueta">Categoría</span>
+          <select class="entrada" id="filtro-gastos-categoria">
+            <option value="todo" ${filtroCategoria === null ? 'selected' : ''}>Todas</option>
+            ${categorias
+              .map(
+                (cat) => `
+              <option value="${cat.id}" ${filtroCategoria === cat.id ? 'selected' : ''}>
+                ${escapar(cat.name)}
+              </option>`,
+              )
+              .join('')}
+          </select>
+        </label>
+        <label class="campo gastos-filtros__campo">
+          <span class="campo__etiqueta">Medio de pago</span>
+          <select class="entrada" id="filtro-gastos-medio">
+            <option value="todo" ${filtroMedio === null ? 'selected' : ''}>Todos</option>
+            ${medios
+              .map(
+                (medio) => `
+              <option value="${medio.id}" ${filtroMedio === medio.id ? 'selected' : ''}>
+                ${escapar(medio.name)}
+              </option>`,
+              )
+              .join('')}
+          </select>
+        </label>
+      </div>`;
+  }
+
+  function cabezaGastos(rotuloExtra, filtrando) {
+    return `
+        <div class="bloque__cabeza">
+          <div>
+            <h2>Gastos de ${escapar(nombreMes(mes))}</h2>
+            ${rotuloExtra ? `<span class="rotulo">${escapar(rotuloExtra)}</span>` : ''}
+          </div>
+          ${
+            filtrando
+              ? `<button type="button" class="boton boton--fantasma boton--chico" data-quitar-filtros-gastos>
+                   Ver todos
+                 </button>`
+              : ''
+          }
+        </div>
+        ${filtrosGastos()}`;
+  }
+
   /* ══ Vista: gastos ═══════════════════════════════════════════════ */
 
   function vistaGastos() {
     const filtrando = Boolean(filtroCategoria || filtroMedio);
-    const tituloMes = nombreMes(mes);
     const lista = gastosDelMes(mes).filter((g) => {
       if (filtroCategoria && g.categoryId !== filtroCategoria) return false;
       if (filtroMedio && g.accountId !== filtroMedio) return false;
       return true;
     });
-
-    const tituloGastos = (() => {
-      const partes = [];
-      if (filtroCategoria) partes.push(nombreCategoria(filtroCategoria));
-      if (filtroMedio) partes.push(cuentaPorId(filtroMedio)?.name ?? 'Medio');
-      if (partes.length > 0) partes.push(tituloMes);
-      return partes.length > 0 ? partes.join(' · ') : `Gastos de ${tituloMes}`;
-    })();
 
     const vacioGastos = (() => {
       if (filtroCategoria && filtroMedio) {
@@ -1534,16 +1602,7 @@
     if (lista.length === 0) {
       return `
         <section class="bloque">
-          <div class="bloque__cabeza">
-            <h2>${escapar(tituloGastos)}</h2>
-            ${
-              filtrando
-                ? `<button type="button" class="boton boton--fantasma boton--chico" data-quitar-filtros-gastos>
-                     Ver todos
-                   </button>`
-                : ''
-            }
-          </div>
+          ${cabezaGastos(null, filtrando)}
           <div class="vacio">
             <strong>${escapar(vacioGastos)}</strong>
             ${filtrando ? 'Prueba otro mes o quita el filtro.' : 'Registra un gasto y aparecerá aquí, agrupado por día.'}
@@ -1559,22 +1618,11 @@
     }
 
     const total = lista.reduce((suma, g) => suma + g.myShareCents, 0);
+    const rotulo = `${lista.length} movimientos · ${plata(total)} tuyos`;
 
     return `
       <section class="bloque">
-        <div class="bloque__cabeza">
-          <div>
-            <h2>${escapar(tituloGastos)}</h2>
-            <span class="rotulo">${lista.length} movimientos · ${plata(total)} tuyos</span>
-          </div>
-          ${
-            filtrando
-              ? `<button type="button" class="boton boton--fantasma boton--chico" data-quitar-filtros-gastos>
-                   Ver todos
-                 </button>`
-              : ''
-          }
-        </div>
+        ${cabezaGastos(rotulo, filtrando)}
         <div class="lista">
           ${Array.from(porDia.entries())
             .map(([dia, gastos]) => {
@@ -4730,10 +4778,6 @@
       if (ir.dataset.ir !== 'pasivos') {
         pasivoDetalle = null;
       }
-      if (ir.dataset.ir === 'gastos') {
-        filtroCategoria = null;
-        filtroMedio = null;
-      }
       vista = ir.dataset.ir;
       pintar();
       return;
@@ -4742,7 +4786,6 @@
     const verMedio = objetivo.closest('[data-ver-medio]');
     if (verMedio) {
       filtroMedio = verMedio.dataset.verMedio;
-      filtroCategoria = null;
       vista = 'gastos';
       pintar();
       return;
@@ -4751,7 +4794,6 @@
     const verCategoria = objetivo.closest('[data-ver-categoria]');
     if (verCategoria) {
       filtroCategoria = verCategoria.dataset.verCategoria;
-      filtroMedio = null;
       vista = 'gastos';
       pintar();
       return;
@@ -5253,6 +5295,18 @@
 
   document.addEventListener('change', (evento) => {
     const objetivo = evento.target;
+
+    if (objetivo.id === 'filtro-gastos-categoria') {
+      filtroCategoria = objetivo.value === 'todo' ? null : objetivo.value;
+      pintar();
+      return;
+    }
+
+    if (objetivo.id === 'filtro-gastos-medio') {
+      filtroMedio = objetivo.value === 'todo' ? null : objetivo.value;
+      pintar();
+      return;
+    }
 
     if (objetivo.id === 'gasto-incluirme') {
       borrador.incluirme = objetivo.checked;
