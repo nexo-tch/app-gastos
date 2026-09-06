@@ -1917,6 +1917,14 @@
       </div>`;
   }
 
+  function entrarDetallePersona(idPersona) {
+    if (personaDetalle !== idPersona) {
+      personaDetalleDesglose = null;
+      filtroPersonasMes = mes;
+    }
+    personaDetalle = idPersona;
+  }
+
   function vistaPersonas() {
     if (personaDetalle) return vistaPersonaDetalle(personaDetalle);
 
@@ -4047,7 +4055,8 @@
       personaAceptadaId = persona.id;
     });
 
-    personaDetalle = personaAceptadaId;
+    if (personaAceptadaId) entrarDetallePersona(personaAceptadaId);
+    else personaDetalle = null;
     pintar();
     recibido = null;
     olvidarEnlace();
@@ -4540,6 +4549,10 @@
     const paso = objetivo.closest('[data-mes]');
     if (paso) {
       mes = M.addMonths(mes, Number(paso.dataset.mes));
+      if (personaDetalle) {
+        filtroPersonasMes = mes;
+        personaDetalleDesglose = null;
+      }
       pintar();
       return;
     }
@@ -4664,10 +4677,7 @@
 
     const verPersona = objetivo.closest('[data-ver-persona]');
     if (verPersona) {
-      if (personaDetalle !== verPersona.dataset.verPersona) {
-        personaDetalleDesglose = null;
-      }
-      personaDetalle = verPersona.dataset.verPersona;
+      entrarDetallePersona(verPersona.dataset.verPersona);
       pintar();
       return;
     }

@@ -225,6 +225,10 @@ comprobar(
 const ana = guardado().personas.find((p) => p.name === 'Ana');
 clic(`[data-ver-persona="${ana.id}"]`);
 comprobar('el detalle de persona queda en la URL', window.location.hash.includes(`p=${ana.id}`));
+comprobar(
+  'al entrar al detalle filtra por el mes actual',
+  doc.querySelector(`[data-filtro-personas-mes="${mesPrueba}"][aria-pressed="true"]`) !== null,
+);
 comprobar('el detalle ofrece filtros de mes', doc.querySelector('.personas-filtros') !== null);
 comprobar('el detalle de persona mantiene tablero lite', doc.getElementById('tablero').dataset.modo === 'lite');
 comprobar('el detalle no muestra filtro de categoría', doc.getElementById('filtro-personas-categoria') === null);
