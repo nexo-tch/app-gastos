@@ -1902,13 +1902,11 @@
   }
 
   function netoBalancePersona(cuenta, mio, mesFiltro) {
-    const { cobrar, pagar, neto } = montosPersonaFiltrados(cuenta, mio, mesFiltro, null);
-    const credito = mesFiltro === null ? (cuenta?.creditCents ?? 0) : 0;
-    return { cobrar, pagar, neto: neto - credito, credito };
+    return montosPersonaFiltrados(cuenta, mio, mesFiltro, null);
   }
 
   function htmlBalancePersonaDetalle(cobrar, pagar, neto, opciones = {}) {
-    const { mesEtiqueta = null, credito = 0 } = opciones;
+    const { mesEtiqueta = null } = opciones;
     const prefijo = mesEtiqueta ? `En ${mesEtiqueta}, ` : 'En total, ';
 
     let netoTexto = '';
@@ -1927,7 +1925,6 @@
       partes.push(`Te debe ${plata(cobrar)}`);
       partes.push(`Le debes ${plata(pagar)}`);
     }
-    if (credito > 0 && !mesEtiqueta) partes.push(`${plata(credito)} a favor sin aplicar`);
 
     return `
       <div class="persona__balance">
@@ -2241,12 +2238,10 @@
       cobrar: pendienteCobrar,
       pagar: pendientePagar,
       neto: netoBalance,
-      credito,
     } = netoBalancePersona(cuenta, mio, mesFiltro);
     const mesEtiqueta = filtradoMes ? nombreMes(mesFiltro) : null;
     const balanceHtml = htmlBalancePersonaDetalle(pendienteCobrar, pendientePagar, netoBalance, {
       mesEtiqueta,
-      credito,
     });
 
     const itemsCobrarVisibles = filtradoMes
@@ -2267,9 +2262,7 @@
       datos.deudas.some((d) => d.personId === persona.id);
 
     const hayBloqueCobrar =
-      pendienteCobrar > 0 ||
-      itemsCobrarVisibles.length > 0 ||
-      (!filtradoMes && (cuenta?.creditCents ?? 0) > 0);
+      pendienteCobrar > 0 || itemsCobrarVisibles.length > 0;
     const hayBloquePagar = pendientePagar > 0 || itemsPagarVisibles.length > 0;
 
     const itemsCobrarResumen = filtradoMes
@@ -2349,14 +2342,6 @@
                            ? 'Sin gastos compartidos en este mes.'
                            : 'Sin gastos compartidos pendientes.'
                      }</p>`
-               }
-               ${
-                 (cuenta?.creditCents ?? 0) > 0
-                   ? `<div class="deuda">
-                        <span class="deuda__que">Saldo a favor sin aplicar</span>
-                        <span class="deuda__cuanto">${plata(cuenta.creditCents)}</span>
-                      </div>`
-                   : ''
                }
              </div>
            </div>`
@@ -3679,8 +3664,7 @@
 
     const teDebe = cuenta?.pendingCents ?? 0;
     const leDebes = mio?.pendingCents ?? 0;
-    const credito = cuenta?.creditCents ?? 0;
-    const neto = teDebe - credito - leDebes;
+    const neto = teDebe - leDebes;
 
     const items = [];
     for (const item of (cuenta?.items ?? []).filter((x) => !x.isSettled && (x.pendingCents || x.amountCents) > 0)) {
@@ -3705,7 +3689,7 @@
       pn: String(persona.name).slice(0, 40),
       c: teDebe,
       p: leDebes,
-      cr: credito,
+      cr: 0,
       n: neto,
       i: items.slice(0, 25),
     };
@@ -3715,7 +3699,6 @@
     const lineas = [`Te comparto nuestra cuenta${persona.name ? `, ${persona.name}` : ''}:`];
     if (teDebe > 0) lineas.push(`Me debes ${plata(teDebe)}`);
     if (leDebes > 0) lineas.push(`Te debo ${plata(leDebes)}`);
-    if (credito > 0) lineas.push(`Tienes ${plata(credito)} a favor sin aplicar`);
 
     if (neto > 0) lineas.push(`\nEn total me debes ${plata(neto)}.`);
     else if (neto < 0) lineas.push(`\nEn total te debo ${plata(-neto)}.`);
@@ -3821,7 +3804,7 @@
         c: entero(carga.c),
         p: entero(carga.p),
         cr: entero(carga.cr),
-        n: Number.isInteger(carga.n) ? carga.n : entero(carga.c) - entero(carga.cr) - entero(carga.p),
+        n: Number.isInteger(carga.n) ? carga.n : entero(carga.c) - entero(carga.p),
         i: items,
       };
     } catch {
@@ -3876,16 +3859,6 @@
       <div class="cuenta__bloques">
         ${htmlBloqueCuenta(`Le debes a ${escapar(quien)}`, carga.c, itemsDebes, 'pagar')}
         ${htmlBloqueCuenta(`${escapar(quien)} te debe`, carga.p, itemsTeDebe, 'cobrar')}
-        ${
-          carga.cr > 0
-            ? `<div class="persona__bloque persona__bloque--cobrar">
-                 <div class="persona__bloque-cabeza">
-                   <span class="persona__bloque-titulo">A tu favor sin aplicar</span>
-                   <span class="persona__bloque-total cifra">${plata(carga.cr)}</span>
-                 </div>
-               </div>`
-            : ''
-        }
       </div>`;
 
     dialogoCuenta.showModal();
