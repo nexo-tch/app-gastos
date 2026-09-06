@@ -2005,7 +2005,7 @@
     const filas = datos.personas.map((persona) => {
       const cuenta = cuentas.byPerson.find((p) => p.personId === persona.id);
       const mio = mias.byPerson.find((p) => p.personId === persona.id);
-      const { cobrar, pagar, neto } = netoBalancePersona(cuenta, mio, mes);
+      const { cobrar, pagar, neto } = netoBalancePersona(cuenta, mio, null);
       return { persona, cuenta, mio, cobrar, pagar, neto };
     });
 
@@ -2059,11 +2059,11 @@
     const { cobrar, pagar, neto } =
       montos ??
       (() => {
-        const balance = netoBalancePersona(cuenta, mio, mes);
+        const balance = netoBalancePersona(cuenta, mio, null);
         return balance;
       })();
 
-    const filtrado = true;
+    const filtrado = false;
 
     let montoDerecha = '';
     let signoNeto = 'cero';
