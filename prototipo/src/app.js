@@ -4411,10 +4411,6 @@
       if (pestana.dataset.vista !== 'pasivos') {
         pasivoDetalle = null;
       }
-      if (pestana.dataset.vista === 'personas' && vista !== 'personas') {
-        filtroPersonasMes = mes;
-        filtroPersonasCategoria = null;
-      }
       vista = pestana.dataset.vista;
       pintar();
       return;
@@ -4433,10 +4429,6 @@
       }
       if (ir.dataset.ir === 'gastos') {
         filtroCategoria = null;
-      }
-      if (ir.dataset.ir === 'personas' && vista !== 'personas') {
-        filtroPersonasMes = mes;
-        filtroPersonasCategoria = null;
       }
       vista = ir.dataset.ir;
       pintar();
