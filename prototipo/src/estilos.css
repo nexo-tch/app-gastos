@@ -903,6 +903,39 @@ button {
   font-family: var(--mono);
 }
 
+.renglon--pasivo {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  cursor: default;
+}
+
+.renglon--pasivo:hover {
+  background: transparent;
+}
+
+.renglon__cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.renglon--pasivo .renglon__detalle {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  line-height: 1.35;
+}
+
+.renglon__fecha {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  color: var(--texto-3);
+  white-space: nowrap;
+  padding-top: 2px;
+  text-align: right;
+}
+
 .dia {
   display: flex;
   align-items: baseline;

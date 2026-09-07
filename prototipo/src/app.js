@@ -2803,13 +2803,13 @@
                    .map((mov) => {
                      const detalle = detalleMovimientoPasivo(pasivo, mov);
                      return `
-                       <div class="renglon">
+                       <div class="renglon renglon--pasivo">
                          <div class="renglon__cuerpo">
                            <strong>${escapar(ETIQUETAS_MOV_PASIVO[mov.kind] ?? mov.kind)}</strong>
                            <span class="renglon__detalle">${escapar(detalle)}</span>
                            ${mov.note ? `<span class="renglon__detalle">${escapar(mov.note)}</span>` : ''}
                          </div>
-                         <time class="renglon__fecha">${escapar(nombreDia(diaDeIso(mov.createdAt ?? ahora())))}</time>
+                         <time class="renglon__fecha">${escapar(conMayuscula(fechaAvisoCorta(mov.createdAt ?? ahora())))}</time>
                        </div>`;
                    })
                    .join('')}
