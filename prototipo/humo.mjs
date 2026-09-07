@@ -823,6 +823,7 @@ clic('[data-abrir="pasivo"]');
 doc.getElementById('pasivo-tipo').value = 'loan';
 doc.getElementById('pasivo-nombre').value = 'Crédito hipoteca';
 doc.getElementById('pasivo-saldo').value = '10000000';
+doc.getElementById('pasivo-fecha').value = '2026-01-15';
 doc.getElementById('forma-pasivo').dispatchEvent(
   new window.Event('submit', { bubbles: true, cancelable: true }),
 );
@@ -836,6 +837,7 @@ comprobar(
 
 doc.getElementById('pasivo-mov-monto').value = '850000';
 doc.getElementById('pasivo-mov-capital').value = '620000';
+doc.getElementById('pasivo-mov-fecha').value = '2026-03-10';
 doc.getElementById('forma-pasivo-mov').dispatchEvent(
   new window.Event('submit', { bubbles: true, cancelable: true }),
 );
@@ -850,11 +852,19 @@ comprobar(
   'guarda capital e intereses del abono',
   movPagoCredito?.principalCents === 620_000_00 && movPagoCredito?.interestCents === 230_000_00,
 );
+comprobar(
+  'guarda la fecha del abono',
+  (movPagoCredito?.createdAt ?? '').includes('2026-03-10'),
+);
 
 clic(`[data-ver-pasivo="${idCredito}"]`);
 comprobar(
   'historial muestra desglose capital/intereses',
   texto('#lienzo').includes('capital') && texto('#lienzo').includes('intereses'),
+);
+comprobar(
+  'detalle muestra la fecha del saldo inicial',
+  texto('#lienzo').includes('Desde'),
 );
 comprobar(
   'detalle muestra intereses pagados en total',

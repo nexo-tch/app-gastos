@@ -887,6 +887,12 @@
       .filter((m) => m.liabilityId === idPasivo)
       .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 
+  const movimientoInicioPasivo = (idPasivo) =>
+    datos.pasivoMovimientos.find((m) => m.liabilityId === idPasivo && m.kind === 'create') ?? null;
+
+  const fechaPasivoDesdeFormulario = (campoId) =>
+    isoDeDia(document.getElementById(campoId).value || hoyDia());
+
   const ETIQUETAS_MEDIO = {
     cash: 'Efectivo',
     debit: 'Débito',
@@ -2759,6 +2765,7 @@
 
     const movimientos = movimientosDePasivo(idPasivo);
     const interesesPagados = totalInteresesPasivo(idPasivo);
+    const inicio = movimientoInicioPasivo(idPasivo);
 
     return `
       <section class="bloque">
@@ -2769,6 +2776,7 @@
         <p class="pista">
           ${escapar(ETIQUETAS_PASIVO[pasivo.kind] ?? pasivo.kind)} · Saldo actual
           <b class="cifra">${plataPasivo(pasivo)}</b>
+          ${inicio?.createdAt ? ` · Desde ${escapar(nombreDia(diaDeIso(inicio.createdAt)))}` : ''}
           ${pasivo.notes ? ` · ${escapar(pasivo.notes)}` : ''}
         </p>
         ${
@@ -3365,6 +3373,13 @@
       : '';
     document.getElementById('pasivo-notas').value = pasivo?.notes ?? '';
     document.getElementById('pasivo-eliminar').hidden = !pasivo;
+    const inicio = pasivo ? movimientoInicioPasivo(pasivo.id) : null;
+    document.getElementById('pasivo-fecha-etiqueta').textContent = pasivo
+      ? 'Fecha del saldo inicial'
+      : 'Fecha del saldo';
+    document.getElementById('pasivo-fecha').value = inicio?.createdAt
+      ? diaDeIso(inicio.createdAt)
+      : hoyDia();
 
     rellenarSelectoresPasivo(pasivo);
     dialogoPasivo.showModal();
@@ -3378,8 +3393,12 @@
     document.getElementById('pasivo-mov-id').value = idPasivo;
     document.getElementById('pasivo-mov-modo').value = modo;
     document.getElementById('pasivo-mov-nota').value = '';
-
     const esAbono = modo === 'payment';
+    document.getElementById('pasivo-mov-fecha').value = hoyDia();
+    document.getElementById('pasivo-mov-fecha-etiqueta').textContent = esAbono
+      ? 'Cuándo abonaste'
+      : 'Cuándo revisaste el saldo';
+
     document.getElementById('titulo-pasivo-mov').textContent = esAbono
       ? 'Registrar abono'
       : 'Actualizar saldo';
@@ -3425,6 +3444,7 @@
     const modo = document.getElementById('pasivo-mov-modo').value;
     const centavos = centavosDesdeTexto(document.getElementById('pasivo-mov-monto').value);
     const nota = document.getElementById('pasivo-mov-nota').value.trim() || null;
+    const fecha = fechaPasivoDesdeFormulario('pasivo-mov-fecha');
     const pasivo = pasivoPorId(idPasivo);
 
     if (centavos <= 0) {
@@ -3464,7 +3484,7 @@
           interestCents: pasivoUsaDesgloseAbono(pasivoMut) ? interes : null,
           balanceAfterCents: nuevoSaldo,
           note: nota,
-          createdAt: ahora(),
+          createdAt: fecha,
         });
       } else {
         pasivoMut.balanceCents = centavos;
@@ -3475,7 +3495,7 @@
           paymentCents: null,
           balanceAfterCents: centavos,
           note: nota,
-          createdAt: ahora(),
+          createdAt: fecha,
         });
       }
     });
@@ -5561,6 +5581,7 @@
     const accountId = document.getElementById('pasivo-cuenta').value || null;
     const personId = document.getElementById('pasivo-persona').value || null;
     const notes = document.getElementById('pasivo-notas').value.trim() || null;
+    const fechaSaldo = fechaPasivoDesdeFormulario('pasivo-fecha');
 
     if (!nombre) return;
     if (!pasivoEditando && saldo < 0) {
@@ -5582,6 +5603,10 @@
           personId,
           notes,
         });
+        const movInicio = d.pasivoMovimientos.find(
+          (m) => m.liabilityId === editando && m.kind === 'create',
+        );
+        if (movInicio) movInicio.createdAt = fechaSaldo;
       } else {
         const idPasivo = id();
         d.pasivos.push({
@@ -5602,7 +5627,7 @@
           paymentCents: null,
           balanceAfterCents: saldo,
           note: null,
-          createdAt: ahora(),
+          createdAt: fechaSaldo,
         });
       }
     });
