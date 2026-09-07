@@ -789,6 +789,10 @@ comprobar(
 );
 
 clic('[data-abonar-pasivo]');
+comprobar(
+  'tarjeta muestra desglose capital/intereses',
+  doc.getElementById('pasivo-mov-desglose').hidden === false,
+);
 doc.getElementById('pasivo-mov-monto').value = '500000';
 doc.getElementById('forma-pasivo-mov').dispatchEvent(
   new window.Event('submit', { bubbles: true, cancelable: true }),

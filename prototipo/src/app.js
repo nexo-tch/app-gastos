@@ -775,7 +775,7 @@
 
   const ETIQUETAS_PASIVO = {
     card: 'Tarjeta',
-    loan: 'Crédito',
+    loan: 'Préstamo',
     person: 'Persona',
     other: 'Otro',
   };
@@ -820,8 +820,18 @@
     return totales.cop > 0 || totales.usd > 0;
   }
 
+  let pasivoMovCapitalManual = false;
+
   function pasivoUsaDesgloseAbono(pasivo) {
-    return pasivo?.kind === 'loan';
+    return pasivo?.kind === 'card' || pasivo?.kind === 'loan';
+  }
+
+  function sincronizarCapitalDesdeMontoPasivo() {
+    const desglose = document.getElementById('pasivo-mov-desglose');
+    const capital = document.getElementById('pasivo-mov-capital');
+    if (!desglose || desglose.hidden || !capital || pasivoMovCapitalManual) return;
+    capital.value = document.getElementById('pasivo-mov-monto').value;
+    actualizarPistaInteresPasivo();
   }
 
   function actualizarPistaInteresPasivo(pasivoArg) {
@@ -835,7 +845,8 @@
     const total = centavosDesdeTexto(document.getElementById('pasivo-mov-monto').value);
     const capital = centavosDesdeTexto(document.getElementById('pasivo-mov-capital').value);
     if (total <= 0 || capital <= 0) {
-      pista.textContent = 'Según tu extracto: cuánto del pago redujo la deuda.';
+      pista.textContent =
+        'Si todo fue a capital, deja el mismo monto. Si parte fue a intereses, ajusta el capital según tu extracto.';
       return;
     }
     if (capital > total) {
@@ -861,7 +872,7 @@
       if (
         pasivoUsaDesgloseAbono(pasivo) &&
         mov.principalCents != null &&
-        (mov.interestCents ?? 0) >= 0
+        (mov.interestCents ?? 0) > 0
       ) {
         const interes = mov.interestCents ?? mov.paymentCents - mov.principalCents;
         return `−${plataPasivo(pasivo, mov.paymentCents)} (${plataPasivo(pasivo, mov.principalCents)} capital · ${plataPasivo(pasivo, interes)} intereses) · queda ${queda}`;
@@ -3387,7 +3398,8 @@
     const desglose = esAbono && pasivoUsaDesgloseAbono(pasivo);
     document.getElementById('pasivo-mov-desglose').hidden = !desglose;
     document.getElementById('pasivo-mov-capital').value = '';
-    document.getElementById('pasivo-mov-capital').required = desglose;
+    pasivoMovCapitalManual = false;
+    document.getElementById('pasivo-mov-capital').required = false;
     if (desglose) actualizarPistaInteresPasivo(pasivo);
     else document.getElementById('pasivo-mov-interes-pista').textContent = '';
 
@@ -3423,7 +3435,8 @@
     let principal = centavos;
     let interes = 0;
     if (modo === 'payment' && pasivo && pasivoUsaDesgloseAbono(pasivo)) {
-      principal = centavosDesdeTexto(document.getElementById('pasivo-mov-capital').value);
+      const capitalTexto = document.getElementById('pasivo-mov-capital').value.trim();
+      principal = capitalTexto ? centavosDesdeTexto(capitalTexto) : centavos;
       if (principal <= 0) {
         avisar('Indica cuánto del pago fue a capital');
         return false;
@@ -5613,8 +5626,13 @@
     if (!guardarPasivoMovimiento()) evento.preventDefault();
   });
 
-  document.getElementById('pasivo-mov-monto').addEventListener('input', actualizarPistaInteresPasivo);
-  document.getElementById('pasivo-mov-capital').addEventListener('input', actualizarPistaInteresPasivo);
+  document.getElementById('pasivo-mov-monto').addEventListener('input', () => {
+    sincronizarCapitalDesdeMontoPasivo();
+  });
+  document.getElementById('pasivo-mov-capital').addEventListener('input', () => {
+    pasivoMovCapitalManual = true;
+    actualizarPistaInteresPasivo();
+  });
 
   document.getElementById('forma-debo').addEventListener('submit', (evento) => {
     evento.preventDefault();
