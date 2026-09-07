@@ -901,6 +901,19 @@
   const movimientoInicioPasivo = (idPasivo) =>
     datos.pasivoMovimientos.find((m) => m.liabilityId === idPasivo && m.kind === 'create') ?? null;
 
+  function notasFechaPasivo(pasivo) {
+    const partes = [];
+    const inicio = movimientoInicioPasivo(pasivo.id);
+    if (inicio?.createdAt) {
+      partes.push(`Desde ${conMayuscula(fechaAvisoCorta(inicio.createdAt))}`);
+    }
+    const ultimoAbono = movimientosDePasivo(pasivo.id).find((m) => m.kind === 'payment');
+    if (ultimoAbono?.createdAt) {
+      partes.push(`Último abono ${conMayuscula(fechaAvisoCorta(ultimoAbono.createdAt))}`);
+    }
+    return partes.join(' · ');
+  }
+
   const fechaPasivoDesdeFormulario = (campoId) =>
     isoDeDia(document.getElementById(campoId).value || hoyDia());
 
@@ -2733,6 +2746,14 @@
                        : pasivo.personId
                          ? personaPorId(pasivo.personId)?.name
                          : null;
+                     const fechas = notasFechaPasivo(pasivo);
+                     let nota = '';
+                     if (uso !== null) {
+                       nota = `${Math.round(uso)}% del cupo · ${plataPasivo(pasivo, pasivo.limitCents)}`;
+                     } else if (enlace) {
+                       nota = enlace;
+                     }
+                     if (fechas) nota = nota ? `${nota} · ${fechas}` : fechas;
 
                      return `
                        <div class="categoria">
@@ -2745,12 +2766,10 @@
                            uso !== null
                              ? `<div class="medidor">
                                   <span class="medidor__relleno" style="width:${uso}%"></span>
-                                </div>
-                                <div class="categoria__nota">${Math.round(uso)}% del cupo · ${plataPasivo(pasivo, pasivo.limitCents)}</div>`
-                             : enlace
-                               ? `<div class="categoria__nota">${escapar(enlace)}</div>`
-                               : ''
+                                </div>`
+                             : ''
                          }
+                         ${nota ? `<div class="categoria__nota">${escapar(nota)}</div>` : ''}
                          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
                            <button type="button" class="boton boton--marco boton--chico"
                                    data-ver-pasivo="${pasivo.id}">Ver historial</button>
@@ -3386,9 +3405,14 @@
     document.getElementById('pasivo-notas').value = pasivo?.notes ?? '';
     document.getElementById('pasivo-eliminar').hidden = !pasivo;
     const inicio = pasivo ? movimientoInicioPasivo(pasivo.id) : null;
-    document.getElementById('pasivo-fecha-etiqueta').textContent = pasivo
-      ? 'Fecha del saldo inicial'
-      : 'Fecha del saldo';
+    const esTarjeta = (pasivo?.kind ?? document.getElementById('pasivo-tipo').value) === 'card';
+    document.getElementById('pasivo-fecha-etiqueta').textContent = esTarjeta
+      ? pasivo
+        ? 'Fecha del saldo en el extracto'
+        : 'Fecha del extracto'
+      : pasivo
+        ? 'Fecha del saldo inicial'
+        : 'Fecha del saldo';
     document.getElementById('pasivo-fecha').value = inicio?.createdAt
       ? diaDeIso(inicio.createdAt)
       : hoyDia();
@@ -5586,6 +5610,14 @@
 
   document.getElementById('pasivo-moneda').addEventListener('change', (evento) => {
     actualizarUiMonedaPasivo(evento.target.value === 'USD' ? 'USD' : 'COP');
+  });
+
+  document.getElementById('pasivo-tipo').addEventListener('change', () => {
+    if (pasivoEditando) return;
+    const esTarjeta = document.getElementById('pasivo-tipo').value === 'card';
+    document.getElementById('pasivo-fecha-etiqueta').textContent = esTarjeta
+      ? 'Fecha del extracto'
+      : 'Fecha del saldo';
   });
 
   document.getElementById('forma-pasivo').addEventListener('submit', () => {

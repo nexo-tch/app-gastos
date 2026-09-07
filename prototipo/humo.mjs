@@ -774,10 +774,18 @@ comprobar('Mis deudas oculta el tablero del mes', doc.getElementById('tablero').
 clic('[data-abrir="pasivo"]');
 doc.getElementById('pasivo-nombre').value = 'Visa test';
 doc.getElementById('pasivo-saldo').value = '2500000';
+doc.getElementById('pasivo-fecha').value = '2026-02-01';
 doc.getElementById('forma-pasivo').dispatchEvent(
   new window.Event('submit', { bubbles: true, cancelable: true }),
 );
 
+const idVisa = guardado().pasivos.find((p) => p.name === 'Visa test')?.id;
+comprobar(
+  'tarjeta guarda la fecha del saldo inicial',
+  (guardado().pasivoMovimientos.find((m) => m.liabilityId === idVisa && m.kind === 'create')?.createdAt ?? '').includes(
+    '2026-02-01',
+  ),
+);
 comprobar('registra una deuda global', guardado().pasivos.some((p) => p.name === 'Visa test'));
 comprobar(
   'crea movimiento inicial',
@@ -794,8 +802,19 @@ comprobar(
   doc.getElementById('pasivo-mov-desglose').hidden === false,
 );
 doc.getElementById('pasivo-mov-monto').value = '500000';
+doc.getElementById('pasivo-mov-fecha').value = '2026-08-20';
 doc.getElementById('forma-pasivo-mov').dispatchEvent(
   new window.Event('submit', { bubbles: true, cancelable: true }),
+);
+comprobar(
+  'tarjeta guarda la fecha del abono',
+  (guardado().pasivoMovimientos.find((m) => m.liabilityId === idVisa && m.kind === 'payment')?.createdAt ?? '').includes(
+    '2026-08-20',
+  ),
+);
+comprobar(
+  'la lista de tarjetas muestra fechas',
+  texto('#lienzo').includes('Desde') && texto('#lienzo').includes('Último abono'),
 );
 comprobar(
   'el abono baja el saldo',
