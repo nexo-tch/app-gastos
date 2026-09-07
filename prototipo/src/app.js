@@ -3770,6 +3770,40 @@
     abrirAviso(colaAvisos[0]);
   }
 
+  /** Tras cambiar el monto de alguien que ya tenía aviso o aceptación. */
+  function encolarReavisos(ids) {
+    colaAvisos = [...ids];
+    if (colaAvisos.length === 0) {
+      colaAvisos = null;
+      return;
+    }
+    abrirAviso(colaAvisos[0], true);
+  }
+
+  async function reavisarPartesCambiadas(repartos) {
+    if (!repartos.length) return;
+
+    const inApp = [];
+    const fuera = [];
+    for (const { id, personId } of repartos) {
+      if (personaUsaApp(personId)) inApp.push(id);
+      else fuera.push(id);
+    }
+
+    for (const idReparto of inApp) {
+      await entregarInApp(idReparto);
+    }
+    if (fuera.length) encolarReavisos(fuera);
+
+    if (inApp.length && !fuera.length) {
+      avisar('Partes actualizadas. Avisamos en la app a quienes tienen cuenta.');
+    } else if (!inApp.length && fuera.length) {
+      avisar('Partes actualizadas. Vuelve a compartir el enlace con quien corresponda.');
+    } else if (inApp.length && fuera.length) {
+      avisar('Partes actualizadas. Avisamos en la app y te toca reenviar enlace a quien falte.');
+    }
+  }
+
   /** En el celular hay que compartir; en el escritorio, copiar y pegar. */
   const sePuedeCompartir = () => typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
@@ -4114,38 +4148,82 @@
     return carga?.i ? `compartido-${carga.i}` : null;
   }
 
+  /** Gasto + deuda cuando alguien pagó por ti: compartido o anotado a mano. */
+  const SUFIJO_GASTO_DEUDA = '-gasto';
+
+  function idDeudaLigada(idGasto) {
+    return idGasto.endsWith(SUFIJO_GASTO_DEUDA)
+      ? idGasto.slice(0, -SUFIJO_GASTO_DEUDA.length)
+      : null;
+  }
+
   function compartidoYaRegistrado(carga) {
+    return estadoCompartidoRecibido(carga) === 'igual';
+  }
+
+  function estadoCompartidoRecibido(carga) {
     const idDeuda = idCompartidoDeCarga(carga);
-    if (!idDeuda) return false;
+    if (!idDeuda) return 'nuevo';
     const idGasto = `${idDeuda}${SUFIJO_GASTO_DEUDA}`;
-    if (datos.deudas.some((d) => d.id === idDeuda)) return true;
-    return datos.gastos.some((g) => g.id === idGasto && !g.deletedAt);
+    const deuda = datos.deudas.find((d) => d.id === idDeuda);
+    const gasto = datos.gastos.find((g) => g.id === idGasto && !g.deletedAt);
+    if (!deuda && !gasto) return 'nuevo';
+    const montoRegistrado = deuda?.amountCents ?? gasto?.myShareCents ?? null;
+    if (montoRegistrado === carga.c) return 'igual';
+    return 'actualizado';
+  }
+
+  function montoCompartidoRegistrado(carga) {
+    const idDeuda = idCompartidoDeCarga(carga);
+    if (!idDeuda) return null;
+    const deuda = datos.deudas.find((d) => d.id === idDeuda);
+    if (deuda) return deuda.amountCents;
+    const gasto = datos.gastos.find((g) => g.id === `${idDeuda}${SUFIJO_GASTO_DEUDA}` && !g.deletedAt);
+    return gasto?.myShareCents ?? null;
   }
 
   function abrirRecibido(carga) {
     recibido = carga;
-    const yaRegistrado = compartidoYaRegistrado(carga);
+    const estado = estadoCompartidoRecibido(carga);
+    const yaRegistrado = estado === 'igual';
+    const actualizado = estado === 'actualizado';
 
     const sugerida = carga.k
       ? categoriasActivas().find((c) => c.name.toLowerCase() === carga.k.toLowerCase())
       : null;
-    categoriaRecibido = sugerida?.id ?? categoriasActivas()[0]?.id ?? null;
+    if (!yaRegistrado) {
+      categoriaRecibido = sugerida?.id ?? categoriasActivas()[0]?.id ?? null;
+    } else {
+      const idGasto = `${idCompartidoDeCarga(carga)}${SUFIJO_GASTO_DEUDA}`;
+      const gasto = datos.gastos.find((g) => g.id === idGasto && !g.deletedAt);
+      categoriaRecibido = gasto?.categoryId ?? categoriaRecibido ?? categoriasActivas()[0]?.id ?? null;
+    }
 
     const quien = carga.de || 'Alguien';
     document.getElementById('titulo-recibido').textContent = yaRegistrado
       ? 'Ya lo tienes registrado'
-      : `${quien} te compartió un gasto`;
+      : actualizado
+        ? `${quien} actualizó tu parte`
+        : `${quien} te compartió un gasto`;
     document.getElementById('recibido-resumen').innerHTML =
       `<b>${escapar(carga.q || 'Un gasto')}</b> · ${escapar(nombreDia(carga.d))}<br />` +
-      `Tu parte es <b class="cifra">${plata(carga.c)}</b>` +
-      (carga.t > carga.c ? ` de ${plata(carga.t)}` : '');
+      (actualizado
+        ? `Antes <b class="cifra">${plata(montoCompartidoRegistrado(carga))}</b> → ahora ` +
+          `<b class="cifra">${plata(carga.c)}</b>` +
+          (carga.t > carga.c ? ` de ${plata(carga.t)}` : '')
+        : `Tu parte es <b class="cifra">${plata(carga.c)}</b>` +
+          (carga.t > carga.c ? ` de ${plata(carga.t)}` : ''));
     document.getElementById('recibido-explicacion').textContent = yaRegistrado
-      ? 'Este gasto ya está en tus cuentas. No hace falta agregarlo otra vez.'
-      : `Si lo agregas, esos ${plata(carga.c)} entran en tu presupuesto de este mes y queda ` +
-        `apuntado que se los debes a ${quien}.`;
+      ? 'Este gasto ya está en tus cuentas con ese monto. No hace falta agregarlo otra vez.'
+      : actualizado
+        ? `Si confirmas, tus gastos y lo que le debes a ${quien} pasan al monto nuevo.`
+        : `Si lo agregas, esos ${plata(carga.c)} entran en tu presupuesto de este mes y queda ` +
+          `apuntado que se los debes a ${quien}.`;
 
     document.getElementById('recibido-categorias').closest('fieldset').hidden = yaRegistrado;
-    document.getElementById('recibido-agregar').hidden = yaRegistrado;
+    const btnAgregar = document.getElementById('recibido-agregar');
+    btnAgregar.hidden = yaRegistrado;
+    btnAgregar.textContent = actualizado ? 'Actualizar en mis gastos' : 'Agregar a mis gastos';
     document.getElementById('recibido-descartar').textContent = yaRegistrado ? 'Cerrar' : 'Descartar';
 
     if (!yaRegistrado) pintarCategoriasRecibido();
@@ -4163,15 +4241,6 @@
         </button>`,
       )
       .join('');
-  }
-
-  /** Gasto + deuda cuando alguien pagó por ti: compartido o anotado a mano. */
-  const SUFIJO_GASTO_DEUDA = '-gasto';
-
-  function idDeudaLigada(idGasto) {
-    return idGasto.endsWith(SUFIJO_GASTO_DEUDA)
-      ? idGasto.slice(0, -SUFIJO_GASTO_DEUDA.length)
-      : null;
   }
 
   function registrarDeudaConGasto(
@@ -4228,14 +4297,22 @@
         createdAt: previo.createdAt,
         confirmedAt: previo.confirmedAt ?? gasto.confirmedAt,
         description: gastoDescription ?? previo.description ?? gasto.description,
+        updatedAt: ahora(),
       };
     } else {
       d.gastos.push(gasto);
     }
 
     const previa = d.deudas.findIndex((x) => x.id === idDeuda);
-    if (previa >= 0) d.deudas[previa] = deuda;
-    else d.deudas.push(deuda);
+    if (previa >= 0) {
+      const deudaPrevia = d.deudas[previa];
+      deuda.settledAt =
+        settledAt ??
+        (deudaPrevia.amountCents === amountCents ? (deudaPrevia.settledAt ?? null) : null);
+      d.deudas[previa] = deuda;
+    } else {
+      d.deudas.push(deuda);
+    }
   }
 
   async function notificarAceptacionCompartido(carga) {
@@ -4261,14 +4338,16 @@
     const carga = recibido;
     if (!carga) return;
 
-    if (compartidoYaRegistrado(carga)) {
-      avisar('Este gasto ya está en tus cuentas.');
+    const estado = estadoCompartidoRecibido(carga);
+    if (estado === 'igual') {
+      avisar('Este gasto ya está en tus cuentas con ese monto.');
       recibido = null;
       olvidarEnlace();
       dialogoRecibido.close();
       return;
     }
 
+    const esActualizacion = estado === 'actualizado';
     const nombre = carga.de || 'Quien te compartió';
 
     // Los identificadores salen del enlace, así que abrirlo dos veces reescribe
@@ -4316,7 +4395,11 @@
     recibido = null;
     olvidarEnlace();
     dialogoRecibido.close();
-    avisar(`Listo: le debes ${plata(carga.c)} a ${nombre}`);
+    avisar(
+      esActualizacion
+        ? `Actualizado: ahora le debes ${plata(carga.c)} a ${nombre}`
+        : `Listo: le debes ${plata(carga.c)} a ${nombre}`,
+    );
     notificarAceptacionCompartido(carga);
     if (notifOrigen) {
       marcarNotificacionLeida(notifOrigen);
@@ -4521,6 +4604,7 @@
     }
     const editando = borrador.id;
     const repartosGuardados = [];
+    const repartosReavisar = [];
     const wrapAvisar = document.getElementById('gasto-avisar-wrap');
     const quiereAvisar = !wrapAvisar.hidden && document.getElementById('gasto-avisar').checked;
 
@@ -4578,6 +4662,9 @@
         const idReparto = previo?.id ?? id();
         const mismoMonto = previo?.amountCents === parte.amountCents;
         repartosGuardados.push({ id: idReparto, personId: parte.personId });
+        if (previo && !mismoMonto && (previo.acceptedAt || previo.notifiedAt)) {
+          repartosReavisar.push({ id: idReparto, personId: parte.personId });
+        }
         d.repartos.push({
           id: idReparto,
           expenseId: idGasto,
@@ -4591,7 +4678,9 @@
 
     avisar(editando ? 'Gasto actualizado' : 'Gasto registrado');
 
-    if (quiereAvisar) {
+    if (repartosReavisar.length) {
+      setTimeout(() => reavisarPartesCambiadas(repartosReavisar), 60);
+    } else if (quiereAvisar) {
       const cola = repartosGuardados
         .filter((reparto) => personaUsaApp(reparto.personId))
         .map((reparto) => reparto.id)
@@ -5744,7 +5833,16 @@
   /* ══ Arranque ════════════════════════════════════════════════════ */
 
   addEventListener('hashchange', () => {
-    if (hashEsCompartidoOCuenta()) return;
+    const compartido = leerEnlace();
+    if (compartido) {
+      abrirRecibido(compartido);
+      return;
+    }
+    const cuenta = leerEnlaceCuenta();
+    if (cuenta) {
+      abrirCuentaRecibida(cuenta);
+      return;
+    }
     const nav = leerNavDesdeHash();
     if (!nav || navCoincide(nav)) return;
     aplicarNav(nav);

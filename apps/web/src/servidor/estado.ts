@@ -542,8 +542,14 @@ async function guardarRepartos(
           gastoId: sql.raw('excluded.gasto_id'),
           personaId: sql.raw('excluded.persona_id'),
           monto: sql.raw('excluded.monto'),
-          avisadoEn: sql`COALESCE(excluded.avisado_en, ${esquema.repartos.avisadoEn})`,
-          aceptadoEn: sql`COALESCE(excluded.aceptado_en, ${esquema.repartos.aceptadoEn})`,
+          avisadoEn: sql`CASE
+            WHEN ${esquema.repartos.monto} IS DISTINCT FROM excluded.monto THEN excluded.avisado_en
+            ELSE COALESCE(excluded.avisado_en, ${esquema.repartos.avisadoEn})
+          END`,
+          aceptadoEn: sql`CASE
+            WHEN ${esquema.repartos.monto} IS DISTINCT FROM excluded.monto THEN excluded.aceptado_en
+            ELSE COALESCE(excluded.aceptado_en, ${esquema.repartos.aceptadoEn})
+          END`,
         },
       });
   }

@@ -1001,9 +1001,9 @@ async function revisarCuenta(enlace) {
  * verdad dos personas distintas, cada una con sus datos.
  */
 async function revisarRecibido(enlace, delQueComparte) {
-  const abrir = (previo) =>
+  const abrir = (previo, enlaceAbrir = enlace) =>
     new JSDOM(html, {
-      url: `http://localhost/${enlace}`,
+      url: `http://localhost/${enlaceAbrir}`,
       runScripts: 'dangerously',
       pretendToBeVisual: true,
       virtualConsole: consola,
@@ -1081,8 +1081,38 @@ async function revisarRecibido(enlace, delQueComparte) {
   const suEstado = suyo();
   ventana.close();
 
-  // Un enlace se reenvía, se abre dos veces, se toca sin querer.
+  // El emisor cambió el reparto: mismo enlace-id, monto distinto.
+  const cargaNueva = { ...carga, c: Math.max(1, carga.c - 1_000_000) };
+  const enlaceActualizado = `#compartido=${Buffer.from(JSON.stringify(cargaNueva))
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')}`;
+
   ventana = abrir(suEstado);
+  ventana.location.hash = enlaceActualizado;
+  ventana.dispatchEvent(new ventana.Event('hashchange'));
+  await esperar(80);
+
+  comprobar(
+    'un enlace con monto nuevo ofrece actualizar',
+    suTexto('#titulo-recibido').includes('actualiz'),
+  );
+  comprobar(
+    'muestra el monto anterior y el nuevo',
+    suTexto('#recibido-resumen').includes('Antes') && suTexto('#recibido-resumen').includes('ahora'),
+  );
+  suClic('#recibido-agregar');
+  comprobar(
+    'actualizar ajusta el gasto compartido al monto nuevo',
+    suyo().gastos[0].myShareCents === cargaNueva.c,
+  );
+  comprobar('y la deuda ligada', suyo().deudas[0].amountCents === cargaNueva.c);
+  const suEstadoActualizado = suyo();
+  ventana.close();
+
+  // Un enlace se reenvía, se abre dos veces, se toca sin querer.
+  ventana = abrir(suEstadoActualizado, enlaceActualizado);
   comprobar(
     'el enlace ya registrado lo dice en el título',
     suTexto('#titulo-recibido').includes('registrado'),
