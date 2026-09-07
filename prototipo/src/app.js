@@ -844,26 +844,38 @@
     if (!pasivo) return;
     const total = centavosDesdeTexto(document.getElementById('pasivo-mov-monto').value);
     const capital = centavosDesdeTexto(document.getElementById('pasivo-mov-capital').value);
+    const cargos = centavosDesdeTexto(document.getElementById('pasivo-mov-cargos').value);
     if (total <= 0 || capital <= 0) {
       pista.textContent =
-        'Si todo fue a capital, deja el mismo monto. Si parte fue a intereses, ajusta el capital según tu extracto.';
+        'Si todo fue a capital, deja el mismo monto. Ajusta capital y cargos según tu extracto; el resto son intereses.';
       return;
     }
-    if (capital > total) {
-      pista.textContent = 'El capital no puede ser mayor al total pagado.';
+    if (capital + cargos > total) {
+      pista.textContent = 'Capital y cargos no pueden sumar más que el total pagado.';
       return;
     }
-    const interes = total - capital;
+    const interes = total - capital - cargos;
+    const partes = [`Capital: ${plataPasivo(pasivo, capital)}`];
+    if (interes > 0) partes.push(`Intereses: ${plataPasivo(pasivo, interes)}`);
+    if (cargos > 0) partes.push(`Seguro/cobranza: ${plataPasivo(pasivo, cargos)}`);
     pista.textContent =
-      interes > 0
-        ? `Intereses: ${plataPasivo(pasivo, interes)} · Capital: ${plataPasivo(pasivo, capital)}`
-        : `Todo el pago fue a capital.`;
+      interes > 0 || cargos > 0 ? partes.join(' · ') : 'Todo el pago fue a capital.';
   }
 
   function totalInteresesPasivo(idPasivo) {
     return movimientosDePasivo(idPasivo)
       .filter((m) => m.kind === 'payment')
-      .reduce((s, m) => s + (m.interestCents ?? 0), 0);
+      .reduce((s, m) => s + (m.interestCents ?? 0) + (m.feeCents ?? 0), 0);
+  }
+
+  function desgloseMovimientoPasivo(pasivo, mov) {
+    const partes = [];
+    if (mov.principalCents != null) partes.push(`${plataPasivo(pasivo, mov.principalCents)} capital`);
+    const interes = mov.interestCents ?? 0;
+    const cargos = mov.feeCents ?? 0;
+    if (interes > 0) partes.push(`${plataPasivo(pasivo, interes)} intereses`);
+    if (cargos > 0) partes.push(`${plataPasivo(pasivo, cargos)} seguro/cobranza`);
+    return partes.join(' · ');
   }
 
   function detalleMovimientoPasivo(pasivo, mov) {
@@ -872,10 +884,9 @@
       if (
         pasivoUsaDesgloseAbono(pasivo) &&
         mov.principalCents != null &&
-        (mov.interestCents ?? 0) > 0
+        ((mov.interestCents ?? 0) > 0 || (mov.feeCents ?? 0) > 0)
       ) {
-        const interes = mov.interestCents ?? mov.paymentCents - mov.principalCents;
-        return `−${plataPasivo(pasivo, mov.paymentCents)} (${plataPasivo(pasivo, mov.principalCents)} capital · ${plataPasivo(pasivo, interes)} intereses) · queda ${queda}`;
+        return `−${plataPasivo(pasivo, mov.paymentCents)} (${desgloseMovimientoPasivo(pasivo, mov)}) · queda ${queda}`;
       }
       return `−${plataPasivo(pasivo, mov.paymentCents)} · queda ${queda}`;
     }
@@ -2781,7 +2792,7 @@
         </p>
         ${
           pasivoUsaDesgloseAbono(pasivo) && interesesPagados > 0
-            ? `<p class="pista">Intereses pagados en total: <b class="cifra">${plataPasivo(pasivo, interesesPagados)}</b></p>`
+            ? `<p class="pista">Intereses y cargos pagados en total: <b class="cifra">${plataPasivo(pasivo, interesesPagados)}</b></p>`
             : ''
         }
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
@@ -3335,6 +3346,7 @@
     const signo = signoMonedaPasivo(moneda);
     document.getElementById('pasivo-mov-signo').textContent = signo;
     document.getElementById('pasivo-mov-capital-signo').textContent = signo;
+    document.getElementById('pasivo-mov-cargos-signo').textContent = signo;
   }
 
   function rellenarSelectoresPasivo(pasivo = null) {
@@ -3417,6 +3429,7 @@
     const desglose = esAbono && pasivoUsaDesgloseAbono(pasivo);
     document.getElementById('pasivo-mov-desglose').hidden = !desglose;
     document.getElementById('pasivo-mov-capital').value = '';
+    document.getElementById('pasivo-mov-cargos').value = '';
     pasivoMovCapitalManual = false;
     document.getElementById('pasivo-mov-capital').required = false;
     if (desglose) actualizarPistaInteresPasivo(pasivo);
@@ -3454,18 +3467,21 @@
 
     let principal = centavos;
     let interes = 0;
+    let cargos = 0;
     if (modo === 'payment' && pasivo && pasivoUsaDesgloseAbono(pasivo)) {
       const capitalTexto = document.getElementById('pasivo-mov-capital').value.trim();
       principal = capitalTexto ? centavosDesdeTexto(capitalTexto) : centavos;
+      const cargosTexto = document.getElementById('pasivo-mov-cargos').value.trim();
+      cargos = cargosTexto ? centavosDesdeTexto(cargosTexto) : 0;
       if (principal <= 0) {
         avisar('Indica cuánto del pago fue a capital');
         return false;
       }
-      if (principal > centavos) {
-        avisar('El capital no puede ser mayor al total pagado');
+      if (principal + cargos > centavos) {
+        avisar('Capital y cargos no pueden sumar más que el total pagado');
         return false;
       }
-      interes = centavos - principal;
+      interes = centavos - principal - cargos;
     }
 
     mutar((d) => {
@@ -3482,6 +3498,7 @@
           paymentCents: centavos,
           principalCents: pasivoUsaDesgloseAbono(pasivoMut) ? principal : centavos,
           interestCents: pasivoUsaDesgloseAbono(pasivoMut) ? interes : null,
+          feeCents: pasivoUsaDesgloseAbono(pasivoMut) && cargos > 0 ? cargos : null,
           balanceAfterCents: nuevoSaldo,
           note: nota,
           createdAt: fecha,
@@ -5658,6 +5675,7 @@
     pasivoMovCapitalManual = true;
     actualizarPistaInteresPasivo();
   });
+  document.getElementById('pasivo-mov-cargos').addEventListener('input', actualizarPistaInteresPasivo);
 
   document.getElementById('forma-debo').addEventListener('submit', (evento) => {
     evento.preventDefault();

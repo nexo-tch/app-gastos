@@ -837,6 +837,7 @@ comprobar(
 
 doc.getElementById('pasivo-mov-monto').value = '850000';
 doc.getElementById('pasivo-mov-capital').value = '620000';
+doc.getElementById('pasivo-mov-cargos').value = '30000';
 doc.getElementById('pasivo-mov-fecha').value = '2026-03-10';
 doc.getElementById('forma-pasivo-mov').dispatchEvent(
   new window.Event('submit', { bubbles: true, cancelable: true }),
@@ -850,7 +851,11 @@ const movPagoCredito = guardado().pasivoMovimientos.find(
 );
 comprobar(
   'guarda capital e intereses del abono',
-  movPagoCredito?.principalCents === 620_000_00 && movPagoCredito?.interestCents === 230_000_00,
+  movPagoCredito?.principalCents === 620_000_00 && movPagoCredito?.interestCents === 200_000_00,
+);
+comprobar(
+  'guarda seguro y gastos de cobranza del abono',
+  movPagoCredito?.feeCents === 30_000_00,
 );
 comprobar(
   'guarda la fecha del abono',
@@ -860,15 +865,17 @@ comprobar(
 clic(`[data-ver-pasivo="${idCredito}"]`);
 comprobar(
   'historial muestra desglose capital/intereses',
-  texto('#lienzo').includes('capital') && texto('#lienzo').includes('intereses'),
+  texto('#lienzo').includes('capital') &&
+    texto('#lienzo').includes('intereses') &&
+    texto('#lienzo').includes('seguro/cobranza'),
 );
 comprobar(
   'detalle muestra la fecha del saldo inicial',
   texto('#lienzo').includes('Desde'),
 );
 comprobar(
-  'detalle muestra intereses pagados en total',
-  texto('#lienzo').includes('Intereses pagados en total'),
+  'detalle muestra intereses y cargos pagados en total',
+  texto('#lienzo').includes('Intereses y cargos pagados en total'),
 );
 
 clic('.pestana[data-vista="resumen"]');

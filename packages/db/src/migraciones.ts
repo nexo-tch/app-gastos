@@ -97,4 +97,8 @@ export const MIGRACIONES: Migracion[] = [
       'ALTER TABLE "pasivo_movimientos" ADD COLUMN "interes" integer;',
     ],
   },
+  {
+    nombre: "0009_pasivo_mov_cargos",
+    sentencias: ['ALTER TABLE "pasivo_movimientos" ADD COLUMN "cargos" integer;'],
+  },
 ];
