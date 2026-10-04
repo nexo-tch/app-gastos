@@ -2922,9 +2922,1315 @@
       </section>`;
   }
 
+  /* ══ Viajes en grupo ═════════════════════════════════════════════
+   * Lo único de la app que no vive en `datos`. Un viaje es de varias cuentas
+   * a la vez, así que no viaja con el estado personal ni pasa por `mutar()`:
+   * se lee y se escribe contra `/api/viajes`, y cada respuesta trae el viaje
+   * entero para pintarlo sin pedir nada más.
+   *
+   * Tampoco toca el presupuesto. Es un módulo aparte: lo que se carga aquí no
+   * es un gasto del mes, es una cuenta de grupo.
+   */
+
+  const MONEDAS_VIAJE = M.TRIP_CURRENCIES;
+  const CATEGORIAS_VIAJE = M.TRIP_CATEGORIES;
+  const SIGNOS_MONEDA = { COP: '$', EUR: '€', USD: 'US$', GBP: '£', CHF: 'CHF' };
+  const NOMBRES_MONEDA = {
+    COP: 'Pesos colombianos (COP)',
+    EUR: 'Euros (EUR)',
+    USD: 'Dólares (USD)',
+    GBP: 'Libras (GBP)',
+    CHF: 'Francos suizos (CHF)',
+  };
+
+  let viajes = [];
+  let yoEnViajes = null;
+  let viajesEstado = 'sin-cargar';
+  let viajeDetalle = null;
+  /** Lo último que llegó del servidor, para no repintar si nada cambió. */
+  let firmaViajes = '';
+  /** La moneda que usó cada quien la última vez, por viaje: casi siempre se repite. */
+  const ultimaMonedaViaje = {};
+
+  /** Se lee antes del primer pintado, que reescribe el fragmento con la navegación. */
+  const leerCodigoUnirse = (hash) => {
+    const encontrado = /^#unirse=([A-Za-z0-9_-]{4,40})/.exec(hash ?? '');
+    return encontrado ? encontrado[1] : null;
+  };
+  let codigoUnirsePendiente = leerCodigoUnirse(location.hash);
+
+  const viajePorId = (idViaje) => viajes.find((v) => v.id === idViaje) ?? null;
+  const viajeAbierto = () => (viajeDetalle ? viajePorId(viajeDetalle) : null);
+  const categoriaViaje = (idCat) =>
+    CATEGORIAS_VIAJE.find((c) => c.id === idCat) ?? CATEGORIAS_VIAJE[CATEGORIAS_VIAJE.length - 1];
+
+  const nombreMiembro = (viaje, idUsuario) =>
+    viaje.miembros.find((m) => m.id === idUsuario)?.nombre ?? 'Alguien que salió';
+  const quienEs = (viaje, idUsuario) => (idUsuario === yoEnViajes ? 'Tú' : nombreMiembro(viaje, idUsuario));
+
+  /* ── Plata en cualquier moneda ─────────────────────────────────── */
+
+  const plataEn = (moneda, centavos) => {
+    if (moneda === 'COP') return plata(centavos);
+    const numero = new Intl.NumberFormat('es-CO', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(Math.abs(centavos) / 100);
+    return `${centavos < 0 ? '-' : ''}${SIGNOS_MONEDA[moneda] ?? moneda} ${numero}`;
+  };
+
+  /**
+   * Un número escrito a mano, con coma o punto decimal. "12,50" y "12.50" son
+   * doce y medio; "4.500" y "1.234,5" se leen como se escriben en Colombia.
+   */
+  function numeroDesdeTexto(texto) {
+    let limpio = String(texto ?? '').trim().replace(/[\s$€£]/g, '');
+    if (!limpio) return null;
+    const punto = limpio.lastIndexOf('.');
+    const coma = limpio.lastIndexOf(',');
+    let decimal = null;
+    if (punto >= 0 && coma >= 0) decimal = punto > coma ? '.' : ',';
+    else if (coma >= 0) decimal = /^\d{1,3}(,\d{3})+$/.test(limpio) ? null : ',';
+    else if (punto >= 0) decimal = /^\d{1,3}(\.\d{3})+$/.test(limpio) ? null : '.';
+
+    if (decimal) {
+      const miles = decimal === ',' ? /\./g : /,/g;
+      limpio = limpio.replace(miles, '').replace(decimal, '.');
+    } else {
+      limpio = limpio.replace(/[.,]/g, '');
+    }
+    if (!/^\d*\.?\d*$/.test(limpio)) return null;
+    const numero = Number(limpio);
+    return Number.isFinite(numero) ? numero : null;
+  }
+
+  /** El peso se escribe sin centavos, como en el resto de la app; las demás monedas sí los llevan. */
+  const centavosEn = (moneda, texto) => {
+    if (moneda === 'COP') return centavosDesdeTexto(texto);
+    const numero = numeroDesdeTexto(texto);
+    return numero === null ? 0 : M.toCents(numero);
+  };
+
+  const textoDesdeCentavosEn = (moneda, centavos) => {
+    if (!centavos) return '';
+    if (moneda === 'COP') return textoDesdeCentavos(centavos);
+    return new Intl.NumberFormat('es-CO', {
+      minimumFractionDigits: centavos % 100 === 0 ? 0 : 2,
+      maximumFractionDigits: 2,
+    }).format(centavos / 100);
+  };
+
+  const textoTasa = (tasa) =>
+    new Intl.NumberFormat('es-CO', { maximumFractionDigits: 6 }).format(tasa);
+
+  const monedasDeViaje = (viaje) => [
+    ...Object.keys(viaje.tasas).filter((m) => m !== viaje.monedaBase),
+    viaje.monedaBase,
+  ];
+
+  /* ── Hablar con el servidor ────────────────────────────────────── */
+
+  async function pedirViajes(url, init = {}) {
+    try {
+      const respuesta = await fetch(url, {
+        credentials: 'same-origin',
+        ...init,
+        headers: init.body ? { 'content-type': 'application/json' } : undefined,
+      });
+      const cuerpo = await respuesta.json().catch(() => ({}));
+      if (respuesta.status === 401) {
+        location.href = '/entrar';
+        return { ok: false, error: 'Tu sesión se cerró.' };
+      }
+      if (!respuesta.ok) return { ok: false, error: cuerpo.error ?? 'No se pudo guardar.' };
+      return { ok: true, cuerpo };
+    } catch {
+      return { ok: false, error: 'No hay conexión. Los viajes necesitan internet para guardarse.' };
+    }
+  }
+
+  async function cargarViajes() {
+    if (!almacen.conCuenta) return;
+    if (viajesEstado === 'sin-cargar') viajesEstado = 'cargando';
+    const resultado = await pedirViajes('/api/viajes');
+    if (!resultado.ok) {
+      if (viajesEstado !== 'listo') viajesEstado = 'error';
+      if (vista === 'viajes') pintar({ sinNav: true });
+      return;
+    }
+
+    const firma = JSON.stringify(resultado.cuerpo);
+    const cambio = firma !== firmaViajes || viajesEstado !== 'listo';
+    firmaViajes = firma;
+    viajes = resultado.cuerpo.viajes ?? [];
+    yoEnViajes = resultado.cuerpo.yo ?? null;
+    viajesEstado = 'listo';
+    if (cambio && vista === 'viajes') pintar({ sinNav: true });
+  }
+
+  function adoptarViaje(viaje) {
+    const puesto = viajes.findIndex((v) => v.id === viaje.id);
+    if (puesto >= 0) viajes[puesto] = viaje;
+    else viajes.push(viaje);
+    firmaViajes = '';
+  }
+
+  /** Toda escritura: manda, adopta el viaje que vuelve y repinta. */
+  async function escribirViaje(url, metodo, cuerpo) {
+    const resultado = await pedirViajes(url, {
+      method: metodo,
+      body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
+    });
+    if (!resultado.ok) return resultado;
+    adoptarViaje(resultado.cuerpo.viaje);
+    pintar();
+    return resultado;
+  }
+
+  /**
+   * Trae la última versión de un viaje. Se usa antes de abrir el formulario de
+   * gasto: si alguien entró hace un minuto, tiene que aparecer para repartirle.
+   */
+  async function refrescarViaje(idViaje) {
+    const resultado = await pedirViajes(`/api/viajes/${idViaje}`);
+    if (resultado.ok) adoptarViaje(resultado.cuerpo.viaje);
+    return resultado;
+  }
+
+  async function abrirGastoViajeAlDia(idViaje, idGasto) {
+    await refrescarViaje(idViaje);
+    const viaje = viajePorId(idViaje);
+    if (!viaje) return;
+    const gasto = idGasto ? viaje.gastos.find((g) => g.id === idGasto) : null;
+    if (idGasto && !gasto) {
+      avisar('Ese gasto ya no existe.');
+      pintar();
+      return;
+    }
+    if (vista === 'viajes') pintar({ sinNav: true });
+    abrirGastoViaje(viaje, gasto);
+  }
+
+  async function unirseConCodigo(codigo) {
+    const resultado = await pedirViajes('/api/viajes/unirse', {
+      method: 'POST',
+      body: JSON.stringify({ codigo }),
+    });
+    if (!resultado.ok) return resultado;
+    const viaje = resultado.cuerpo.viaje;
+    adoptarViaje(viaje);
+    if (!yoEnViajes) await cargarViajes();
+    viajeDetalle = viaje.id;
+    vista = 'viajes';
+    pintar();
+    avisar(`Estás en «${viaje.nombre}»`);
+    return resultado;
+  }
+
+  async function unirseDesdeEnlace() {
+    const codigo = codigoUnirsePendiente;
+    codigoUnirsePendiente = null;
+    if (!codigo) return;
+    if (!almacen.conCuenta) {
+      avisar('Para unirte a un viaje abre el enlace en la app con tu cuenta.');
+      return;
+    }
+    const resultado = await unirseConCodigo(codigo);
+    if (!resultado.ok) avisar(resultado.error);
+  }
+
+  /* ── Las cuentas del viaje ─────────────────────────────────────── */
+
+  function cuentasDeViaje(viaje) {
+    try {
+      const saldos = M.computeTripBalances({
+        memberIds: viaje.miembros.map((m) => m.id),
+        baseCurrency: viaje.monedaBase,
+        rates: viaje.tasas,
+        expenses: viaje.gastos.map((g) => ({
+          currency: g.moneda,
+          totalCents: g.montoTotal,
+          parts: g.partes.map((p) => ({ memberId: p.usuarioId, paidCents: p.pagado, owedCents: p.debe })),
+        })),
+        settlements: viaje.pagos.map((p) => ({ fromId: p.de, toId: p.a, amountCents: p.monto })),
+      });
+      const totalGastado = viaje.gastos.reduce(
+        (suma, g) => suma + M.convertToBase(g.montoTotal, g.moneda, viaje.monedaBase, viaje.tasas),
+        0,
+      );
+      return { saldos, transferencias: M.simplifyDebts(saldos), totalGastado, error: null };
+    } catch (error) {
+      return { saldos: [], transferencias: [], totalGastado: 0, error: error.message };
+    }
+  }
+
+  function textoSaldo(viaje, saldo) {
+    if (!saldo || saldo.balanceCents === 0) return { texto: 'Estás a paz y salvo', estado: 'ok' };
+    if (saldo.balanceCents > 0) {
+      return { texto: `Te deben ${plataEn(viaje.monedaBase, saldo.balanceCents)}`, estado: 'cobrar' };
+    }
+    return { texto: `Debes ${plataEn(viaje.monedaBase, -saldo.balanceCents)}`, estado: 'pagar' };
+  }
+
+  /* ── Vistas ────────────────────────────────────────────────────── */
+
+  function vistaViajes() {
+    if (!almacen.conCuenta) {
+      return `
+        <div class="vacio">
+          <strong>Los viajes necesitan una cuenta</strong>
+          Son un espacio compartido: cada uno entra con su cuenta, carga lo que pagó y todos ven
+          quién le debe a quién. Abre la app desde su dirección web para usarlos.
+        </div>`;
+    }
+
+    if (viajesEstado === 'sin-cargar' || (viajesEstado === 'cargando' && viajes.length === 0)) {
+      return `<div class="vacio">Cargando viajes…</div>`;
+    }
+
+    if (viajesEstado === 'error' && viajes.length === 0) {
+      return `
+        <div class="vacio">
+          <strong>No se pudieron cargar los viajes</strong>
+          Revisa la conexión.
+          <div style="margin-top:12px">
+            <button type="button" class="boton boton--marco boton--chico" data-viajes-recargar>Intentar otra vez</button>
+          </div>
+        </div>`;
+    }
+
+    if (viajeDetalle) {
+      const viaje = viajeAbierto();
+      if (viaje) return vistaViajeDetalle(viaje);
+      viajeDetalle = null;
+    }
+
+    return `
+      <section class="bloque">
+        <div class="bloque__cabeza">
+          <h2>Viajes en grupo</h2>
+          <span class="viaje-acciones">
+            <button type="button" class="boton boton--fantasma boton--chico" data-viaje-unirse>Unirme</button>
+            <button type="button" class="boton boton--marco boton--chico" data-viaje-nuevo>Nuevo viaje</button>
+          </span>
+        </div>
+        <p class="pista">
+          Cada persona carga lo que pagó y la app va haciendo las cuentas: quién le debe a quién y
+          cuánto. No entra en tu presupuesto del mes.
+        </p>
+        ${
+          viajes.length === 0
+            ? `<div class="vacio">
+                 <strong>Todavía no estás en ningún viaje</strong>
+                 Crea uno e invita a los demás con un enlace, o únete con el que te compartieron.
+               </div>`
+            : `<div class="lista">${viajes.map(renglonViaje).join('')}</div>`
+        }
+      </section>`;
+  }
+
+  function renglonViaje(viaje) {
+    const { saldos } = cuentasDeViaje(viaje);
+    const mio = textoSaldo(viaje, saldos.find((s) => s.memberId === yoEnViajes));
+    const detalle = [
+      `${viaje.miembros.length} ${viaje.miembros.length === 1 ? 'persona' : 'personas'}`,
+      `${viaje.gastos.length} ${viaje.gastos.length === 1 ? 'gasto' : 'gastos'}`,
+    ].join(' · ');
+
+    return `
+      <button type="button" class="renglon" data-ver-viaje="${viaje.id}">
+        <span class="punto" style="background:#2D7FA8">${escapar(iniciales(viaje.nombre).slice(0, 2))}</span>
+        <span class="renglon__medio">
+          <span class="renglon__titulo">${escapar(viaje.nombre)}</span>
+          <span class="renglon__detalle">${escapar(detalle)}</span>
+        </span>
+        <span class="renglon__cifras">
+          <span class="viaje-saldo" data-estado="${mio.estado}">${escapar(mio.texto)}</span>
+        </span>
+      </button>`;
+  }
+
+  function vistaViajeDetalle(viaje) {
+    const cuentas = cuentasDeViaje(viaje);
+    const mio = cuentas.saldos.find((s) => s.memberId === yoEnViajes);
+    const resumen = textoSaldo(viaje, mio);
+    const base = viaje.monedaBase;
+    const gastos = [...viaje.gastos].sort(
+      (a, b) => b.ocurrioEn.localeCompare(a.ocurrioEn) || b.id.localeCompare(a.id),
+    );
+    const soyCreador = viaje.creadoPor === yoEnViajes;
+
+    return `
+      <div class="viaje-volver">
+        <button type="button" class="boton boton--fantasma boton--chico" data-volver-viajes>‹ Viajes</button>
+      </div>
+
+      <section class="pasivos-resumen" aria-live="polite">
+        <p class="rotulo viaje-rotulo">${escapar(viaje.nombre)}</p>
+        <p class="pasivos-resumen__titulo${resumen.estado === 'ok' ? ' pasivos-resumen__titulo--ok' : ''}">
+          ${escapar(resumen.texto)}
+        </p>
+        <p class="pista">
+          Entre todos: <b>${plataEn(base, cuentas.totalGastado)}</b>
+          ${mio ? ` · Lo tuyo: <b>${plataEn(base, mio.owedCents)}</b>` : ''}
+        </p>
+        <div class="viaje-acciones viaje-acciones--resumen">
+          <button type="button" class="boton boton--solido boton--chico" data-viaje-gasto-nuevo>Agregar gasto</button>
+          <button type="button" class="boton boton--marco boton--chico viaje-boton-claro" data-viaje-invitar>Invitar</button>
+        </div>
+      </section>
+
+      ${cuentas.error ? `<div class="vacio"><strong>Las cuentas no cuadran</strong>${escapar(cuentas.error)}</div>` : ''}
+
+      <section class="bloque">
+        <div class="bloque__cabeza">
+          <h2>Quién le paga a quién</h2>
+          ${
+            cuentas.transferencias.length
+              ? `<button type="button" class="boton boton--marco boton--chico" data-viaje-pago-libre>Registrar pago</button>`
+              : ''
+          }
+        </div>
+        ${
+          cuentas.transferencias.length === 0
+            ? `<div class="vacio">${viaje.gastos.length ? 'Todos están a paz y salvo.' : 'Cuando carguen gastos, aquí aparece quién le debe a quién.'}</div>`
+            : `<div class="lista">
+                 ${cuentas.transferencias.map((t) => filaTransferencia(viaje, t)).join('')}
+               </div>
+               <p class="pista">Las deudas de todos se juntan en las menos transferencias posibles.</p>`
+        }
+      </section>
+
+      <section class="bloque">
+        <div class="bloque__cabeza">
+          <h2>Gastos</h2>
+          <button type="button" class="boton boton--marco boton--chico" data-viaje-gasto-nuevo>Agregar gasto</button>
+        </div>
+        ${
+          gastos.length === 0
+            ? `<div class="vacio">
+                 <strong>Sin gastos todavía</strong>
+                 Carga lo que pagaste: las entradas, el hotel, una cena.
+               </div>`
+            : `<div class="lista">${gastos.map((g) => renglonGastoViaje(viaje, g)).join('')}</div>`
+        }
+      </section>
+
+      <section class="bloque">
+        <div class="bloque__cabeza"><h2>Cómo va cada uno</h2></div>
+        <div class="lista">
+          ${cuentas.saldos.map((s) => filaSaldoMiembro(viaje, s)).join('')}
+        </div>
+      </section>
+
+      ${
+        viaje.pagos.length
+          ? `<section class="bloque">
+               <div class="bloque__cabeza"><h2>Pagos registrados</h2></div>
+               <div class="lista">
+                 ${[...viaje.pagos].reverse().map((p) => filaPagoViaje(viaje, p)).join('')}
+               </div>
+             </section>`
+          : ''
+      }
+
+      <section class="bloque">
+        <div class="bloque__cabeza">
+          <h2>El viaje</h2>
+          ${soyCreador ? `<button type="button" class="boton boton--fantasma boton--chico" data-viaje-editar>Editar</button>` : ''}
+        </div>
+        <div class="fichas">
+          ${viaje.miembros
+            .map((m) => `<span class="ficha ficha--quieta">${escapar(m.id === yoEnViajes ? `${m.nombre} (tú)` : m.nombre)}</span>`)
+            .join('')}
+          <button type="button" class="ficha ficha--sumar" data-viaje-invitar>+ Invitar</button>
+        </div>
+        <p class="pista">
+          Las cuentas se suman en ${escapar(NOMBRES_MONEDA[base] ?? base)}.
+          ${Object.entries(viaje.tasas)
+            .map(([m, tasa]) => `1 ${escapar(m)} = ${escapar(plataEn(base, Math.round(tasa * 100)))}`)
+            .join(' · ')}
+          ${soyCreador ? '' : `Las tasas las cambia ${escapar(nombreMiembro(viaje, viaje.creadoPor))}.`}
+        </p>
+      </section>`;
+  }
+
+  function filaTransferencia(viaje, transferencia) {
+    const meToca = transferencia.fromId === yoEnViajes || transferencia.toId === yoEnViajes;
+    const de = escapar(quienEs(viaje, transferencia.fromId));
+    const a = escapar(nombreMiembro(viaje, transferencia.toId));
+    const frase =
+      transferencia.toId === yoEnViajes
+        ? `<b>${de}</b> te paga`
+        : transferencia.fromId === yoEnViajes
+          ? `<b>Tú</b> le pagas a <b>${a}</b>`
+          : `<b>${de}</b> le paga a <b>${a}</b>`;
+
+    return `
+      <div class="renglon renglon--quieto viaje-deuda" data-me-toca="${meToca}">
+        <span class="renglon__medio">
+          <span class="renglon__titulo">${frase}</span>
+        </span>
+        <span class="renglon__cifras">
+          <span class="renglon__monto">${plataEn(viaje.monedaBase, transferencia.amountCents)}</span>
+          ${
+            meToca
+              ? `<button type="button" class="boton boton--marco boton--chico" data-viaje-pagar
+                         data-de="${transferencia.fromId}" data-a="${transferencia.toId}"
+                         data-monto="${transferencia.amountCents}">Registrar pago</button>`
+              : ''
+          }
+        </span>
+      </div>`;
+  }
+
+  function resumenPagadores(viaje, gasto) {
+    const pagaron = gasto.partes.filter((p) => p.pagado > 0);
+    if (pagaron.length === 1) {
+      return pagaron[0].usuarioId === yoEnViajes ? 'Pagaste tú' : `Pagó ${nombreMiembro(viaje, pagaron[0].usuarioId)}`;
+    }
+    const nombres = pagaron.map((p) => (p.usuarioId === yoEnViajes ? 'tú' : nombreMiembro(viaje, p.usuarioId)));
+    return `Pagaron ${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`;
+  }
+
+  function renglonGastoViaje(viaje, gasto) {
+    const categoria = categoriaViaje(gasto.categoria);
+    const participan = gasto.partes.filter((p) => p.participa).length;
+    const mia = gasto.partes.find((p) => p.usuarioId === yoEnViajes && p.participa);
+    const detalle = [
+      resumenPagadores(viaje, gasto),
+      participan === viaje.miembros.length ? 'entre todos' : `entre ${participan}`,
+      fechaAvisoCorta(gasto.ocurrioEn),
+    ].join(' · ');
+
+    return `
+      <button type="button" class="renglon" data-ver-gasto-viaje="${gasto.id}">
+        <span class="punto" style="background:${categoria.color}">${escapar(categoria.name.slice(0, 1))}</span>
+        <span class="renglon__medio">
+          <span class="renglon__titulo">${escapar(gasto.descripcion)}</span>
+          <span class="renglon__detalle">${escapar(detalle)}</span>
+        </span>
+        <span class="renglon__cifras">
+          <span class="renglon__monto">${plataEn(gasto.moneda, gasto.montoTotal)}</span>
+          ${mia ? `<span class="renglon__aparte">tuyo ${plataEn(gasto.moneda, mia.debe)}</span>` : ''}
+        </span>
+      </button>`;
+  }
+
+  function filaSaldoMiembro(viaje, saldo) {
+    const base = viaje.monedaBase;
+    const estado = saldo.balanceCents > 0 ? 'cobrar' : saldo.balanceCents < 0 ? 'pagar' : 'ok';
+    const nombre = saldo.memberId === yoEnViajes ? `${nombreMiembro(viaje, saldo.memberId)} (tú)` : nombreMiembro(viaje, saldo.memberId);
+    const cifra =
+      saldo.balanceCents === 0
+        ? 'a paz y salvo'
+        : saldo.balanceCents > 0
+          ? `le deben ${plataEn(base, saldo.balanceCents)}`
+          : `debe ${plataEn(base, -saldo.balanceCents)}`;
+
+    return `
+      <div class="renglon renglon--quieto">
+        <span class="renglon__medio">
+          <span class="renglon__titulo">${escapar(nombre)}</span>
+          <span class="renglon__detalle">Pagó ${plataEn(base, saldo.paidCents)} · le tocó ${plataEn(base, saldo.owedCents)}</span>
+        </span>
+        <span class="renglon__cifras">
+          <span class="viaje-saldo" data-estado="${estado}">${escapar(cifra)}</span>
+        </span>
+      </div>`;
+  }
+
+  function filaPagoViaje(viaje, pago) {
+    return `
+      <div class="renglon renglon--quieto">
+        <span class="renglon__medio">
+          <span class="renglon__titulo">${escapar(quienEs(viaje, pago.de))} → ${escapar(quienEs(viaje, pago.a))}</span>
+          <span class="renglon__detalle">${escapar(fechaAvisoCorta(pago.ocurrioEn))} · lo registró ${escapar(pago.registradoPor === yoEnViajes ? 'tú' : nombreMiembro(viaje, pago.registradoPor))}</span>
+        </span>
+        <span class="renglon__cifras">
+          <span class="renglon__monto">${plataEn(viaje.monedaBase, pago.monto)}</span>
+          ${
+            pago.registradoPor === yoEnViajes
+              ? `<button type="button" class="boton boton--fantasma boton--chico" data-viaje-borrar-pago="${pago.id}">Quitar</button>`
+              : ''
+          }
+        </span>
+      </div>`;
+  }
+
+  /* ── Crear o editar el viaje ───────────────────────────────────── */
+
+  const dialogoViaje = document.getElementById('dialogo-viaje');
+  let viajeEditando = null;
+
+  function abrirViaje(viaje) {
+    viajeEditando = viaje?.id ?? null;
+    document.getElementById('titulo-viaje').textContent = viaje ? 'Editar viaje' : 'Nuevo viaje';
+    document.getElementById('viaje-guardar').textContent = viaje ? 'Guardar' : 'Crear viaje';
+    document.getElementById('viaje-nombre').value = viaje?.nombre ?? '';
+    document.getElementById('viaje-error').hidden = true;
+
+    const base = document.getElementById('viaje-moneda-base');
+    base.innerHTML = MONEDAS_VIAJE.map(
+      (m) => `<option value="${m}">${escapar(NOMBRES_MONEDA[m] ?? m)}</option>`,
+    ).join('');
+    base.value = viaje?.monedaBase ?? 'COP';
+    base.disabled = Boolean(viaje);
+
+    pintarTasasViaje(viaje?.tasas ?? { EUR: '' });
+    dialogoViaje.showModal();
+    setTimeout(() => document.getElementById('viaje-nombre').focus(), 40);
+  }
+
+  function pintarTasasViaje(tasas) {
+    const base = document.getElementById('viaje-moneda-base').value;
+    document.getElementById('viaje-tasas').innerHTML = MONEDAS_VIAJE.filter((m) => m !== base)
+      .map((m) => {
+        const tasa = tasas[m];
+        return `
+          <div class="reparto__fila">
+            <span>1 ${m} = cuántos ${escapar(SIGNOS_MONEDA[base] ?? base)} ${base}</span>
+            <input class="entrada" inputmode="decimal" data-viaje-tasa="${m}"
+                   placeholder="${m === 'EUR' && base === 'COP' ? '4.500' : 'sin tasa'}"
+                   value="${typeof tasa === 'number' ? textoTasa(tasa) : ''}" />
+          </div>`;
+      })
+      .join('');
+  }
+
+  function tasasDelFormulario() {
+    const tasas = {};
+    for (const campo of document.querySelectorAll('[data-viaje-tasa]')) {
+      if (!campo.value.trim()) continue;
+      const tasa = numeroDesdeTexto(campo.value);
+      if (tasa === null || tasa <= 0) return { error: `La tasa de ${campo.dataset.viajeTasa} no es un número.` };
+      tasas[campo.dataset.viajeTasa] = tasa;
+    }
+    return { tasas };
+  }
+
+  async function guardarViaje() {
+    const error = document.getElementById('viaje-error');
+    const nombre = document.getElementById('viaje-nombre').value.trim();
+    const { tasas, error: errorTasas } = tasasDelFormulario();
+    const fallar = (mensaje) => {
+      error.textContent = mensaje;
+      error.hidden = false;
+    };
+    if (!nombre) return fallar('Ponle un nombre al viaje.');
+    if (errorTasas) return fallar(errorTasas);
+
+    const resultado = viajeEditando
+      ? await escribirViaje(`/api/viajes/${viajeEditando}`, 'PATCH', { nombre, tasas })
+      : await escribirViaje('/api/viajes', 'POST', {
+          nombre,
+          monedaBase: document.getElementById('viaje-moneda-base').value,
+          tasas,
+        });
+    if (!resultado.ok) return fallar(resultado.error);
+
+    if (!viajeEditando) {
+      if (!yoEnViajes) await cargarViajes();
+      viajeDetalle = resultado.cuerpo.viaje.id;
+      pintar();
+      dialogoViaje.close();
+      abrirInvitar(resultado.cuerpo.viaje);
+      return;
+    }
+    dialogoViaje.close();
+    avisar('Viaje actualizado');
+  }
+
+  /* ── Invitar ───────────────────────────────────────────────────── */
+
+  const dialogoInvitar = document.getElementById('dialogo-viaje-invitar');
+  let enlaceInvitacion = '';
+
+  function abrirInvitar(viaje) {
+    enlaceInvitacion = `${location.origin}/#unirse=${viaje.codigo}`;
+    document.getElementById('viaje-invitar-enlace').textContent =
+      `Únete a «${viaje.nombre}» para llevar las cuentas del viaje: ${enlaceInvitacion}`;
+    document.getElementById('viaje-invitar-compartir').textContent = sePuedeCompartir()
+      ? 'Compartir'
+      : 'Copiar enlace';
+    dialogoInvitar.showModal();
+  }
+
+  async function compartirInvitacion() {
+    const texto = document.getElementById('viaje-invitar-enlace').textContent;
+    try {
+      if (sePuedeCompartir()) {
+        await navigator.share({ text: texto });
+      } else {
+        await navigator.clipboard.writeText(texto);
+        avisar('Enlace copiado');
+      }
+      dialogoInvitar.close();
+    } catch (error) {
+      if (error?.name !== 'AbortError') avisar('No se pudo compartir. Copia el texto a mano.');
+    }
+  }
+
+  /* ── Gasto del viaje ───────────────────────────────────────────── */
+
+  const dialogoGastoViaje = document.getElementById('dialogo-viaje-gasto');
+  let bvg = null;
+
+  function abrirGastoViaje(viaje, gasto) {
+    const monedas = monedasDeViaje(viaje);
+    const pagaron = gasto ? gasto.partes.filter((p) => p.pagado > 0) : [];
+    const participan = gasto ? gasto.partes.filter((p) => p.participa) : [];
+
+    bvg = {
+      viajeId: viaje.id,
+      id: gasto?.id ?? null,
+      categoria: gasto?.categoria ?? 'comida',
+      pagoModo: pagaron.length > 1 ? 'varios' : 'uno',
+      pagador: pagaron.length === 1 ? pagaron[0].usuarioId : yoEnViajes,
+      pagos: Object.fromEntries(pagaron.map((p) => [p.usuarioId, p.pagado])),
+      participantes: gasto ? participan.map((p) => p.usuarioId) : viaje.miembros.map((m) => m.id),
+      modo: gasto?.modo ?? 'equal',
+      montos:
+        gasto?.modo === 'amounts' ? Object.fromEntries(participan.map((p) => [p.usuarioId, p.peso ?? p.debe])) : {},
+      porcentajes:
+        gasto?.modo === 'percent' ? Object.fromEntries(participan.map((p) => [p.usuarioId, (p.peso ?? 0) / 100])) : {},
+    };
+
+    document.getElementById('titulo-viaje-gasto').textContent = gasto ? 'Editar gasto del viaje' : 'Gasto del viaje';
+    document.getElementById('vg-guardar').textContent = gasto ? 'Guardar cambios' : 'Guardar gasto';
+    document.getElementById('vg-eliminar').hidden = !gasto;
+    document.getElementById('vg-descripcion').value = gasto?.descripcion ?? '';
+    document.getElementById('vg-fecha').value = gasto ? diaDeIso(gasto.ocurrioEn) : hoyDia();
+
+    const moneda = gasto?.moneda ?? (monedas.includes(ultimaMonedaViaje[viaje.id]) ? ultimaMonedaViaje[viaje.id] : monedas[0]);
+    const selector = document.getElementById('vg-moneda');
+    selector.innerHTML = monedas.map((m) => `<option value="${m}">${m}</option>`).join('');
+    selector.value = moneda;
+    document.getElementById('vg-monto').value = gasto ? textoDesdeCentavosEn(moneda, gasto.montoTotal) : '';
+
+    pintarCategoriasViaje();
+    refrescarGastoViaje();
+    dialogoGastoViaje.showModal();
+    setTimeout(() => document.getElementById(gasto ? 'vg-monto' : 'vg-descripcion').focus(), 40);
+  }
+
+  const monedaGastoViaje = () => document.getElementById('vg-moneda').value;
+
+  function pintarCategoriasViaje() {
+    document.getElementById('vg-categorias').innerHTML = CATEGORIAS_VIAJE.map(
+      (c) => `
+        <button type="button" class="ficha-categoria" data-vg-categoria="${c.id}"
+                aria-pressed="${c.id === bvg.categoria}">
+          <i class="categoria__mecha" style="background:${c.color}"></i>
+          <span>${escapar(c.name)}</span>
+        </button>`,
+    ).join('');
+  }
+
+  /** Pinta todo lo que depende de quién pagó y cómo se reparte. Le roba el foco a los campos, por eso se llama poco. */
+  function refrescarGastoViaje() {
+    const viaje = viajePorId(bvg.viajeId);
+    if (!viaje) return;
+    const moneda = monedaGastoViaje();
+    const signo = SIGNOS_MONEDA[moneda] ?? moneda;
+    document.getElementById('vg-signo').textContent = signo;
+
+    document.querySelectorAll('[data-vg-pago]').forEach((b) =>
+      b.setAttribute('aria-pressed', String(b.dataset.vgPago === bvg.pagoModo)),
+    );
+    document.querySelectorAll('[data-vg-modo]').forEach((b) =>
+      b.setAttribute('aria-pressed', String(b.dataset.vgModo === bvg.modo)),
+    );
+
+    const pagadores = document.getElementById('vg-pagadores');
+    const pagosMontos = document.getElementById('vg-pagadores-montos');
+    if (bvg.pagoModo === 'uno') {
+      pagadores.hidden = false;
+      pagosMontos.innerHTML = '';
+      pagadores.innerHTML = viaje.miembros
+        .map(
+          (m) => `
+          <button type="button" class="ficha" data-vg-pagador="${m.id}"
+                  aria-pressed="${m.id === bvg.pagador}">${escapar(m.id === yoEnViajes ? 'Yo' : m.nombre)}</button>`,
+        )
+        .join('');
+    } else {
+      pagadores.hidden = true;
+      pagosMontos.innerHTML = viaje.miembros
+        .map(
+          (m) => `
+          <div class="reparto__fila">
+            <span>${escapar(m.id === yoEnViajes ? 'Yo' : m.nombre)}</span>
+            <input class="entrada" inputmode="decimal" data-vg-pago-monto="${m.id}" placeholder="${escapar(signo)} 0"
+                   value="${textoDesdeCentavosEn(moneda, bvg.pagos[m.id] ?? 0)}" />
+          </div>`,
+        )
+        .join('');
+    }
+
+    document.getElementById('vg-participantes').innerHTML = viaje.miembros
+      .map(
+        (m) => `
+        <button type="button" class="ficha" data-vg-participante="${m.id}"
+                aria-pressed="${bvg.participantes.includes(m.id)}">${escapar(m.id === yoEnViajes ? 'Yo' : m.nombre)}</button>`,
+      )
+      .join('');
+
+    const detalle = document.getElementById('vg-detalle');
+    if (bvg.modo === 'equal') {
+      detalle.innerHTML = '';
+    } else {
+      const esPorcentaje = bvg.modo === 'percent';
+      detalle.innerHTML = bvg.participantes
+        .map((idUsuario) => {
+          const valor = esPorcentaje
+            ? (bvg.porcentajes[idUsuario] ?? '')
+            : textoDesdeCentavosEn(moneda, bvg.montos[idUsuario] ?? 0);
+          return `
+            <div class="reparto__fila">
+              <span>${escapar(idUsuario === yoEnViajes ? 'Yo' : nombreMiembro(viaje, idUsuario))}</span>
+              <input class="entrada" inputmode="decimal" data-vg-valor="${idUsuario}"
+                     placeholder="${esPorcentaje ? '%' : `${escapar(signo)} 0`}" value="${valor === '' ? '' : String(valor).replace('.', ',')}" />
+            </div>`;
+        })
+        .join('');
+    }
+
+    pintarResultadoGastoViaje();
+  }
+
+  /** Lo que hay en el formulario, en la forma que espera el servidor. */
+  function cuerpoGastoViaje() {
+    const viaje = viajePorId(bvg.viajeId);
+    const moneda = monedaGastoViaje();
+    const total = centavosEn(moneda, document.getElementById('vg-monto').value);
+    const pagadores =
+      bvg.pagoModo === 'uno'
+        ? [{ usuarioId: bvg.pagador, monto: total }]
+        : viaje.miembros
+            .filter((m) => (bvg.pagos[m.id] ?? 0) > 0)
+            .map((m) => ({ usuarioId: m.id, monto: bvg.pagos[m.id] }));
+    const participantes = bvg.participantes.map((usuarioId) =>
+      bvg.modo === 'amounts'
+        ? { usuarioId, monto: bvg.montos[usuarioId] ?? 0 }
+        : bvg.modo === 'percent'
+          ? { usuarioId, porcentaje: Math.round((bvg.porcentajes[usuarioId] ?? 0) * 100) / 100 }
+          : { usuarioId },
+    );
+
+    return {
+      ...(bvg.id ? { id: bvg.id } : {}),
+      descripcion: document.getElementById('vg-descripcion').value.trim(),
+      categoria: bvg.categoria,
+      moneda,
+      montoTotal: total,
+      ocurrioEn: document.getElementById('vg-fecha').value || hoyDia(),
+      modo: bvg.modo,
+      pagadores,
+      participantes,
+    };
+  }
+
+  /**
+   * El reparto ya resuelto, o por qué todavía no cuadra. Los mensajes dicen
+   * cuánto falta en plata y no en centavos: es lo que hay que corregir.
+   */
+  function gastoViajeResuelto() {
+    const cuerpo = cuerpoGastoViaje();
+    const { moneda, montoTotal: total } = cuerpo;
+    const en = (c) => plataEn(moneda, c);
+
+    if (total <= 0) return { cuerpo, error: 'Escribe cuánto costó.' };
+    if (!bvg.pagador && bvg.pagoModo === 'uno') return { cuerpo, error: 'Elige quién pagó.' };
+
+    if (bvg.pagoModo === 'varios') {
+      const puesto = cuerpo.pagadores.reduce((suma, p) => suma + p.monto, 0);
+      if (puesto < total) return { cuerpo, error: `Lo que pusieron suma ${en(puesto)}: faltan ${en(total - puesto)}.` };
+      if (puesto > total) return { cuerpo, error: `Lo que pusieron suma ${en(puesto)}: sobran ${en(puesto - total)}.` };
+    }
+
+    if (cuerpo.participantes.length === 0) return { cuerpo, error: 'Elige entre quiénes se reparte.' };
+
+    if (bvg.modo === 'amounts') {
+      const repartido = cuerpo.participantes.reduce((suma, p) => suma + p.monto, 0);
+      if (repartido < total) return { cuerpo, error: `Faltan ${en(total - repartido)} por repartir.` };
+      if (repartido > total) return { cuerpo, error: `Sobran ${en(repartido - total)}: el reparto supera el total.` };
+    }
+    if (bvg.modo === 'percent') {
+      const suma = cuerpo.participantes.reduce((s, p) => s + p.porcentaje, 0);
+      if (Math.abs(suma - 100) > 0.0001) {
+        return { cuerpo, error: `Los porcentajes suman ${Math.round(suma * 100) / 100}%, tienen que dar 100%.` };
+      }
+    }
+
+    try {
+      const partes = M.resolveTripExpense({
+        totalCents: total,
+        payers: cuerpo.pagadores.map((p) => ({ memberId: p.usuarioId, amountCents: p.monto })),
+        mode: cuerpo.modo,
+        participants: cuerpo.participantes.map((p) => ({
+          memberId: p.usuarioId,
+          amountCents: p.monto,
+          percent: p.porcentaje,
+        })),
+      });
+      return { cuerpo, partes, error: null };
+    } catch (error) {
+      return { cuerpo, error: error.message };
+    }
+  }
+
+  function pintarResultadoGastoViaje() {
+    const viaje = viajePorId(bvg.viajeId);
+    const salida = document.getElementById('vg-resultado');
+    const { cuerpo, partes, error } = gastoViajeResuelto();
+
+    if (error) {
+      salida.dataset.error = 'true';
+      salida.textContent = error;
+      return;
+    }
+
+    salida.dataset.error = 'false';
+    const toca = partes.filter((p) => p.owedCents > 0);
+    const iguales = toca.every((p) => Math.abs(p.owedCents - toca[0].owedCents) <= 1);
+    if (cuerpo.modo === 'equal' && iguales && toca.length > 1) {
+      salida.innerHTML = `A cada uno le toca <b>${plataEn(cuerpo.moneda, toca[0].owedCents)}</b>`;
+      return;
+    }
+    salida.innerHTML = toca
+      .map((p) => `${escapar(p.memberId === yoEnViajes ? 'Tú' : nombreMiembro(viaje, p.memberId))} <b>${plataEn(cuerpo.moneda, p.owedCents)}</b>`)
+      .join(' · ');
+  }
+
+  async function guardarGastoViaje() {
+    const salida = document.getElementById('vg-resultado');
+    const { cuerpo, error } = gastoViajeResuelto();
+    if (!cuerpo.descripcion) {
+      salida.dataset.error = 'true';
+      salida.textContent = 'Escribe qué fue.';
+      return;
+    }
+    if (error) return;
+
+    const boton = document.getElementById('vg-guardar');
+    boton.disabled = true;
+    const resultado = await escribirViaje(`/api/viajes/${bvg.viajeId}/gastos`, 'POST', cuerpo);
+    boton.disabled = false;
+
+    if (!resultado.ok) {
+      salida.dataset.error = 'true';
+      salida.textContent = resultado.error;
+      return;
+    }
+    ultimaMonedaViaje[bvg.viajeId] = cuerpo.moneda;
+    avisar(bvg.id ? 'Gasto actualizado' : 'Gasto guardado');
+    dialogoGastoViaje.close();
+  }
+
+  async function eliminarGastoViaje() {
+    if (!bvg?.id || !confirm('¿Eliminar este gasto del viaje? Todos dejarán de verlo.')) return;
+    const resultado = await escribirViaje(`/api/viajes/${bvg.viajeId}/gastos/${bvg.id}`, 'DELETE');
+    if (!resultado.ok) {
+      avisar(resultado.error);
+      return;
+    }
+    avisar('Gasto eliminado');
+    dialogoGastoViaje.close();
+  }
+
+  /* ── Ver un gasto ──────────────────────────────────────────────── */
+
+  const dialogoVerGastoViaje = document.getElementById('dialogo-viaje-ver');
+  let gastoViajeViendo = null;
+
+  function abrirVerGastoViaje(viaje, gasto) {
+    gastoViajeViendo = gasto.id;
+    const categoria = categoriaViaje(gasto.categoria);
+    const esMio = gasto.creadoPor === yoEnViajes;
+    const equivalente =
+      gasto.moneda === viaje.monedaBase
+        ? ''
+        : `<p class="pista">Equivale a ${plataEn(viaje.monedaBase, M.convertToBase(gasto.montoTotal, gasto.moneda, viaje.monedaBase, viaje.tasas))}
+             con la tasa del viaje.</p>`;
+
+    document.getElementById('titulo-viaje-ver').textContent = gasto.descripcion;
+    document.getElementById('viaje-ver-cuerpo').innerHTML = `
+      <p class="recibido__resumen">${plataEn(gasto.moneda, gasto.montoTotal)}</p>
+      <p class="pista">${escapar(categoria.name)} · ${escapar(nombreDia(diaDeIso(gasto.ocurrioEn)))} ·
+        lo registró ${escapar(esMio ? 'tú' : nombreMiembro(viaje, gasto.creadoPor))}</p>
+      ${equivalente}
+      <div class="lista">
+        ${gasto.partes
+          .map(
+            (p) => `
+            <div class="renglon renglon--quieto">
+              <span class="renglon__medio">
+                <span class="renglon__titulo">${escapar(quienEs(viaje, p.usuarioId))}</span>
+                <span class="renglon__detalle">${p.pagado > 0 ? `pagó ${plataEn(gasto.moneda, p.pagado)}` : 'no pagó'}</span>
+              </span>
+              <span class="renglon__cifras">
+                <span class="renglon__monto">${p.participa ? plataEn(gasto.moneda, p.debe) : '—'}</span>
+                <span class="renglon__detalle">${p.participa ? 'le toca' : 'no participa'}</span>
+              </span>
+            </div>`,
+          )
+          .join('')}
+      </div>
+      ${esMio ? '' : '<p class="pista">Solo quien lo registró puede cambiarlo.</p>'}`;
+    document.getElementById('viaje-ver-editar').hidden = !esMio;
+    dialogoVerGastoViaje.showModal();
+  }
+
+  /* ── Pagos para saldar ─────────────────────────────────────────── */
+
+  const dialogoPagoViaje = document.getElementById('dialogo-viaje-pago');
+
+  /**
+   * Sin sugerencia (el botón general), se propone lo más probable: si debo,
+   * mi primera transferencia; si me deben, la primera que me llega.
+   */
+  function pagoSugerido(viaje) {
+    const { transferencias } = cuentasDeViaje(viaje);
+    const mia =
+      transferencias.find((t) => t.fromId === yoEnViajes) ??
+      transferencias.find((t) => t.toId === yoEnViajes);
+    return mia ? { de: mia.fromId, a: mia.toId, monto: mia.amountCents } : {};
+  }
+
+  /** Lo máximo que se puede pagar entre las dos personas elegidas, y el texto que lo explica. */
+  function topePagoViaje(viaje) {
+    const de = document.getElementById('vp-de').value;
+    const a = document.getElementById('vp-a').value;
+    const { saldos } = cuentasDeViaje(viaje);
+    const maximo = M.maxSettlementCents(saldos, de, a);
+    const nombreDe = quienEs(viaje, de);
+    const nombreA = a === yoEnViajes ? 'ti' : nombreMiembro(viaje, a);
+    let pista;
+    if (de === a) pista = 'Elige dos personas distintas.';
+    else if (maximo === 0) pista = `${nombreDe} no tiene nada pendiente que pagarle a ${nombreA}.`;
+    else pista = `Puede ser un abono o el total: hasta ${plataEn(viaje.monedaBase, maximo)}.`;
+    return { de, a, maximo, pista, nombreDe, nombreA };
+  }
+
+  function pintarTopePagoViaje() {
+    const viaje = viajeAbierto();
+    if (!viaje) return;
+    const tope = topePagoViaje(viaje);
+    const pista = document.getElementById('vp-pista');
+    pista.textContent = tope.pista;
+    pista.dataset.tope = tope.maximo > 0 ? 'si' : 'no';
+  }
+
+  function abrirPagoViaje(viaje, sugerido = {}) {
+    const opciones = viaje.miembros
+      .map((m) => `<option value="${m.id}">${escapar(m.id === yoEnViajes ? `${m.nombre} (tú)` : m.nombre)}</option>`)
+      .join('');
+    const de = document.getElementById('vp-de');
+    const a = document.getElementById('vp-a');
+    de.innerHTML = opciones;
+    a.innerHTML = opciones;
+    de.value = sugerido.de ?? yoEnViajes;
+    a.value = sugerido.a ?? viaje.miembros.find((m) => m.id !== de.value)?.id ?? '';
+    document.getElementById('vp-signo').textContent = SIGNOS_MONEDA[viaje.monedaBase] ?? viaje.monedaBase;
+    document.getElementById('vp-monto').value = sugerido.monto
+      ? textoDesdeCentavosEn(viaje.monedaBase, sugerido.monto)
+      : '';
+    document.getElementById('vp-fecha').value = hoyDia();
+    document.getElementById('vp-error').hidden = true;
+    pintarTopePagoViaje();
+    dialogoPagoViaje.showModal();
+  }
+
+  async function guardarPagoViaje() {
+    const viaje = viajeAbierto();
+    if (!viaje) return;
+    const error = document.getElementById('vp-error');
+    const fallar = (mensaje) => {
+      error.textContent = mensaje;
+      error.hidden = false;
+    };
+    const cuerpo = {
+      de: document.getElementById('vp-de').value,
+      a: document.getElementById('vp-a').value,
+      monto: centavosEn(viaje.monedaBase, document.getElementById('vp-monto').value),
+      ocurrioEn: document.getElementById('vp-fecha').value || hoyDia(),
+    };
+    if (cuerpo.de === cuerpo.a) return fallar('Elige dos personas distintas.');
+    if (cuerpo.monto <= 0) return fallar('Escribe cuánto fue.');
+    if (cuerpo.de !== yoEnViajes && cuerpo.a !== yoEnViajes) {
+      return fallar('Solo puedes registrar un pago que hiciste o que recibiste.');
+    }
+    const tope = topePagoViaje(viaje);
+    if (tope.maximo === 0) return fallar(tope.pista);
+    if (cuerpo.monto > tope.maximo) {
+      return fallar(
+        `Es más de lo pendiente: lo máximo que ${tope.nombreDe === 'Tú' ? 'puedes pagarle' : `${tope.nombreDe} le puede pagar`} a ${tope.nombreA} es ${plataEn(viaje.monedaBase, tope.maximo)}.`,
+      );
+    }
+
+    const resultado = await escribirViaje(`/api/viajes/${viaje.id}/pagos`, 'POST', cuerpo);
+    if (!resultado.ok) return fallar(resultado.error);
+    avisar('Pago registrado');
+    dialogoPagoViaje.close();
+  }
+
+  /* ── Eventos de los viajes ─────────────────────────────────────── */
+
+  // Va antes que el manejador general a propósito: el botón de registrar
+  // gasto, dentro de un viaje, registra un gasto del viaje.
+  document.addEventListener('click', (evento) => {
+    const objetivo = evento.target;
+    const viaje = viajeAbierto();
+
+    if (objetivo.closest('.pestana[data-vista="viajes"]') && vista === 'viajes') {
+      viajeDetalle = null;
+      return;
+    }
+
+    if (objetivo.closest('[data-abrir="gasto"]') && vista === 'viajes' && viaje) {
+      evento.stopImmediatePropagation();
+      abrirGastoViajeAlDia(viaje.id, null);
+      return;
+    }
+
+    const ver = objetivo.closest('[data-ver-viaje]');
+    if (ver) {
+      viajeDetalle = ver.dataset.verViaje;
+      pintar();
+      cargarViajes();
+      return;
+    }
+
+    if (objetivo.closest('[data-volver-viajes]')) {
+      viajeDetalle = null;
+      pintar();
+      return;
+    }
+
+    if (objetivo.closest('[data-viajes-recargar]')) {
+      viajesEstado = 'sin-cargar';
+      pintar();
+      return;
+    }
+
+    if (objetivo.closest('[data-viaje-nuevo]')) {
+      abrirViaje(null);
+      return;
+    }
+
+    if (objetivo.closest('[data-viaje-editar]') && viaje) {
+      abrirViaje(viaje);
+      return;
+    }
+
+    if (objetivo.closest('[data-viaje-unirse]')) {
+      document.getElementById('viaje-unirse-codigo').value = '';
+      document.getElementById('viaje-unirse-error').hidden = true;
+      document.getElementById('dialogo-viaje-unirse').showModal();
+      return;
+    }
+
+    if (objetivo.closest('[data-viaje-invitar]') && viaje) {
+      abrirInvitar(viaje);
+      return;
+    }
+
+    if (objetivo.closest('#viaje-invitar-compartir')) {
+      compartirInvitacion();
+      return;
+    }
+
+    if (objetivo.closest('[data-viaje-gasto-nuevo]') && viaje) {
+      abrirGastoViajeAlDia(viaje.id, null);
+      return;
+    }
+
+    const verGasto = objetivo.closest('[data-ver-gasto-viaje]');
+    if (verGasto && viaje) {
+      const gasto = viaje.gastos.find((g) => g.id === verGasto.dataset.verGastoViaje);
+      if (gasto) abrirVerGastoViaje(viaje, gasto);
+      return;
+    }
+
+    if (objetivo.closest('#viaje-ver-editar') && viaje) {
+      const gasto = viaje.gastos.find((g) => g.id === gastoViajeViendo);
+      dialogoVerGastoViaje.close();
+      if (gasto) abrirGastoViajeAlDia(viaje.id, gasto.id);
+      return;
+    }
+
+    if (objetivo.closest('#vg-eliminar')) {
+      eliminarGastoViaje();
+      return;
+    }
+
+    const pagar = objetivo.closest('[data-viaje-pagar]');
+    if (pagar && viaje) {
+      abrirPagoViaje(viaje, {
+        de: pagar.dataset.de,
+        a: pagar.dataset.a,
+        monto: Number(pagar.dataset.monto),
+      });
+      return;
+    }
+
+    if (objetivo.closest('[data-viaje-pago-libre]') && viaje) {
+      abrirPagoViaje(viaje, pagoSugerido(viaje));
+      return;
+    }
+
+    const borrarPago = objetivo.closest('[data-viaje-borrar-pago]');
+    if (borrarPago && viaje) {
+      if (!confirm('¿Quitar este pago? La deuda vuelve a aparecer.')) return;
+      escribirViaje(`/api/viajes/${viaje.id}/pagos/${borrarPago.dataset.viajeBorrarPago}`, 'DELETE').then(
+        (resultado) => avisar(resultado.ok ? 'Pago quitado' : resultado.error),
+      );
+      return;
+    }
+
+    if (!bvg || !dialogoGastoViaje.open) return;
+
+    const categoria = objetivo.closest('[data-vg-categoria]');
+    if (categoria) {
+      bvg.categoria = categoria.dataset.vgCategoria;
+      pintarCategoriasViaje();
+      return;
+    }
+
+    const pagoModo = objetivo.closest('[data-vg-pago]');
+    if (pagoModo) {
+      if (pagoModo.dataset.vgPago === 'varios' && bvg.pagoModo === 'uno' && bvg.pagador) {
+        // Al pasar a varios, lo que ya estaba pagado queda escrito en quien pagó.
+        bvg.pagos = { [bvg.pagador]: centavosEn(monedaGastoViaje(), document.getElementById('vg-monto').value) };
+      }
+      bvg.pagoModo = pagoModo.dataset.vgPago;
+      refrescarGastoViaje();
+      return;
+    }
+
+    const pagador = objetivo.closest('[data-vg-pagador]');
+    if (pagador) {
+      bvg.pagador = pagador.dataset.vgPagador;
+      refrescarGastoViaje();
+      return;
+    }
+
+    const participante = objetivo.closest('[data-vg-participante]');
+    if (participante) {
+      const idUsuario = participante.dataset.vgParticipante;
+      const puesto = bvg.participantes.indexOf(idUsuario);
+      if (puesto >= 0) bvg.participantes.splice(puesto, 1);
+      else {
+        const orden = viajePorId(bvg.viajeId).miembros.map((m) => m.id);
+        bvg.participantes = orden.filter((id) => id === idUsuario || bvg.participantes.includes(id));
+      }
+      refrescarGastoViaje();
+      return;
+    }
+
+    const modo = objetivo.closest('[data-vg-modo]');
+    if (modo) {
+      bvg.modo = modo.dataset.vgModo;
+      refrescarGastoViaje();
+    }
+  });
+
+  document.addEventListener('input', (evento) => {
+    const objetivo = evento.target;
+    if (!bvg || !dialogoGastoViaje.open || !dialogoGastoViaje.contains(objetivo)) return;
+    const moneda = monedaGastoViaje();
+
+    if (objetivo.dataset.vgPagoMonto) {
+      bvg.pagos[objetivo.dataset.vgPagoMonto] = centavosEn(moneda, objetivo.value);
+    } else if (objetivo.dataset.vgValor) {
+      if (bvg.modo === 'percent') {
+        bvg.porcentajes[objetivo.dataset.vgValor] = numeroDesdeTexto(objetivo.value) ?? 0;
+      } else {
+        bvg.montos[objetivo.dataset.vgValor] = centavosEn(moneda, objetivo.value);
+      }
+    }
+    pintarResultadoGastoViaje();
+  });
+
+  document.getElementById('vg-moneda').addEventListener('change', () => {
+    // Los montos escritos se releen en la moneda nueva: 12,50 sigue siendo 12,50.
+    const moneda = monedaGastoViaje();
+    const releer = (selector, destino) => {
+      document.querySelectorAll(selector).forEach((campo) => {
+        const clave = campo.dataset.vgPagoMonto ?? campo.dataset.vgValor;
+        destino[clave] = centavosEn(moneda, campo.value);
+      });
+    };
+    releer('[data-vg-pago-monto]', bvg.pagos);
+    if (bvg.modo === 'amounts') releer('[data-vg-valor]', bvg.montos);
+    refrescarGastoViaje();
+  });
+
+  document.getElementById('viaje-moneda-base').addEventListener('change', () => {
+    pintarTasasViaje(tasasDelFormulario().tasas ?? {});
+  });
+
+  document.getElementById('forma-viaje').addEventListener('submit', (evento) => {
+    evento.preventDefault();
+    guardarViaje();
+  });
+
+  document.getElementById('forma-viaje-gasto').addEventListener('submit', (evento) => {
+    evento.preventDefault();
+    guardarGastoViaje();
+  });
+
+  ['vp-de', 'vp-a'].forEach((campo) => {
+    document.getElementById(campo).addEventListener('change', pintarTopePagoViaje);
+  });
+
+  document.getElementById('forma-viaje-pago').addEventListener('submit', (evento) => {
+    evento.preventDefault();
+    guardarPagoViaje();
+  });
+
+  document.getElementById('forma-viaje-unirse').addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    const texto = document.getElementById('viaje-unirse-codigo').value.trim();
+    const codigo = leerCodigoUnirse(texto.slice(texto.indexOf('#'))) ?? (/^[A-Za-z0-9_-]{4,40}$/.test(texto) ? texto : null);
+    const error = document.getElementById('viaje-unirse-error');
+    if (!codigo) {
+      error.textContent = 'Ese enlace no parece una invitación.';
+      error.hidden = false;
+      return;
+    }
+    const resultado = await unirseConCodigo(codigo);
+    if (!resultado.ok) {
+      error.textContent = resultado.error;
+      error.hidden = false;
+      return;
+    }
+    document.getElementById('dialogo-viaje-unirse').close();
+  });
+
+  dialogoGastoViaje.addEventListener('close', () => {
+    bvg = null;
+  });
+
+  // Los demás también cargan gastos: mientras se mira un viaje, se pone al
+  // día solo cada rato y al volver a la pestaña.
+  const hayDialogoDeViajeAbierto = () =>
+    [dialogoGastoViaje, dialogoPagoViaje, dialogoViaje].some((d) => d.open);
+
+  setInterval(() => {
+    if (vista === 'viajes' && document.visibilityState === 'visible' && !hayDialogoDeViajeAbierto()) {
+      cargarViajes();
+    }
+  }, 30_000);
+
+  document.addEventListener('visibilitychange', () => {
+    if (vista === 'viajes' && document.visibilityState === 'visible') cargarViajes();
+  });
+
   /* ══ Pintado general ═════════════════════════════════════════════ */
 
-  const VISTAS = new Set(['resumen', 'gastos', 'presupuesto', 'personas', 'pasivos', 'fijos']);
+  const VISTAS = new Set(['resumen', 'gastos', 'presupuesto', 'personas', 'pasivos', 'fijos', 'viajes']);
 
   const hashEsCompartidoOCuenta = () => /^#(?:compartido|cuenta)=/.test(location.hash);
 
@@ -2946,6 +4252,7 @@
       filtroPersonasMes: params.get('pm'),
       filtroCategoria: params.get('fc'),
       filtroMedio: params.get('fm'),
+      viajeDetalle: params.get('via'),
     };
   }
 
@@ -2967,7 +4274,8 @@
       pasivoNav === (pasivoDetalle ?? null) &&
       pmNav === (filtroPersonasMes ?? null) &&
       fcNav === (filtroCategoria ?? null) &&
-      fmNav === (filtroMedio ?? null)
+      fmNav === (filtroMedio ?? null) &&
+      (nav.viajeDetalle ?? null) === (viajeDetalle ?? null)
     );
   }
 
@@ -2982,6 +4290,9 @@
     filtroCategoria =
       nav.filtroCategoria && categoriaPorId(nav.filtroCategoria) ? nav.filtroCategoria : null;
     filtroMedio = nav.filtroMedio && cuentaPorId(nav.filtroMedio) ? nav.filtroMedio : null;
+    // Los viajes llegan del servidor después: el id se guarda tal cual y la
+    // vista vuelve a la lista si resulta que no es de uno de mis viajes.
+    viajeDetalle = nav.vista === 'viajes' ? (nav.viajeDetalle ?? null) : viajeDetalle;
     personaDetalleDesglose = null;
   }
 
@@ -2995,6 +4306,7 @@
     if (filtroPersonasMes) params.set('pm', filtroPersonasMes);
     if (filtroCategoria) params.set('fc', filtroCategoria);
     if (filtroMedio) params.set('fm', filtroMedio);
+    if (vista === 'viajes' && viajeDetalle) params.set('via', viajeDetalle);
     return `#nav?${params.toString()}`;
   }
 
@@ -3017,9 +4329,14 @@
 
     document.getElementById('mes-nombre').textContent = nombreMes(mes);
 
+    // Los viajes no son del mes ni del presupuesto: ni tablero ni selector de mes.
+    const sinTablero = vista === 'pasivos' || vista === 'viajes';
     const tablero = document.getElementById('tablero');
-    tablero.hidden = vista === 'pasivos';
-    if (vista !== 'pasivos') pintarTablero(resumen, vista === 'resumen' ? 'completo' : 'lite');
+    tablero.hidden = sinTablero;
+    if (!sinTablero) pintarTablero(resumen, vista === 'resumen' ? 'completo' : 'lite');
+    document.querySelector('.mes').hidden = vista === 'viajes';
+    document.querySelector('.flotante').hidden = vista === 'viajes' && !viajeAbierto();
+    if (vista === 'viajes' && viajesEstado === 'sin-cargar') cargarViajes();
 
     document.querySelectorAll('.pestana').forEach((boton) => {
       const activa = boton.dataset.vista === vista;
@@ -3034,6 +4351,7 @@
     else if (vista === 'personas') lienzo.innerHTML = vistaPersonas();
     else if (vista === 'pasivos') lienzo.innerHTML = vistaPasivos();
     else if (vista === 'fijos') lienzo.innerHTML = vistaFijos();
+    else if (vista === 'viajes') lienzo.innerHTML = vistaViajes();
 
     pintarBadgeNotificaciones();
     if (!opciones.sinNav) guardarNavEnHash();
@@ -5833,6 +7151,12 @@
   /* ══ Arranque ════════════════════════════════════════════════════ */
 
   addEventListener('hashchange', () => {
+    const codigoUnirse = leerCodigoUnirse(location.hash);
+    if (codigoUnirse) {
+      codigoUnirsePendiente = codigoUnirse;
+      unirseDesdeEnlace();
+      return;
+    }
     const compartido = leerEnlace();
     if (compartido) {
       abrirRecibido(compartido);
@@ -5862,6 +7186,7 @@
   if (navInicial) aplicarNav(navInicial);
   pintar();
   almacen.estrenar(datos);
+  unirseDesdeEnlace();
 
   // Si se llego aqui desde un enlace compartido, lo primero es resolverlo.
   const compartido = leerEnlace();

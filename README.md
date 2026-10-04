@@ -134,6 +134,21 @@ Los identificadores del gasto y de la deuda salen del propio enlace, así que ab
 
 Lo que yo debo es una lista aparte (`deudas`) y no un reparto con el signo cambiado: del gasto de otra persona no se sabe nada más que lo que ella cuente. Se paga entero, sin abonos parciales, porque cada deuda es la parte de un gasto concreto.
 
+## Viajes en grupo
+
+La pestaña **Viajes** es una cuenta compartida para un viaje: cada persona entra con su propia cuenta, carga lo que pagó y todos ven lo mismo, es decir quién le debe a quién y cuánto.
+
+- **Se entra con un enlace.** Quien crea el viaje comparte `/#unirse=<código>`. Si quien lo abre no tiene cuenta, se la crea y entra directo.
+- **Cada gasto en su moneda.** Un gasto puede estar en EUR, COP, USD, GBP o CHF. Los saldos se suman en la moneda base del viaje con una **tasa fija** que pone quien lo creó. No se usa la tasa del día, para que el saldo no cambie solo y todos vean la misma cifra.
+- **Uno o varios pagadores.** "La cena la pagamos Andrés y yo" se carga con lo que puso cada uno. El reparto puede ir en partes iguales, por porcentaje o por montos, y solo entre quienes participaron.
+- **Menos transferencias.** El motor junta todas las deudas y propone las mínimas en la práctica: nadie le paga a alguien que a su vez le debe. Cuando alguien transfiere, se registra el pago y la deuda baja.
+- **Cada quien lo suyo.** Un gasto solo lo cambia o lo borra quien lo registró. Las tasas y el nombre del viaje los cambia quien lo creó. Un pago lo registra quien paga o quien recibe.
+- **No toca el presupuesto.** Es un módulo aparte: lo del viaje no entra en ningún mes.
+
+Es lo único de la base que no cuelga de `usuario_id`, porque varias cuentas leen y escriben las mismas filas. Por eso no viaja en `/api/estado`: tiene sus propios endpoints en `/api/viajes`, y cada uno comprueba que quien pide sea miembro del viaje. A quien no lo es se le responde igual que si el viaje no existiera. Los ids los pone el servidor, así que nadie puede escoger el de un gasto ajeno. También necesita conexión para guardar: a diferencia del resto de la app, no funciona sin señal.
+
+El cálculo está en `packages/core/src/domain/trips.ts`. Cada gasto se convierte entero a la moneda base y después se reparte con el método del resto mayor, para que los saldos siempre sumen cero al centavo.
+
 ## Cómo entra la plata a la base
 
 Cada cuenta tiene sus propias filas y todas cuelgan de `usuario_id` con borrado en cascada. La clave primaria de cada tabla es `(usuario_id, id)` y no solo `id`: como los identificadores los inventa el navegador, con clave compuesta es imposible que alguien mande el id de otra persona y termine escribiendo en sus datos.

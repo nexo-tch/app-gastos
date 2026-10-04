@@ -101,4 +101,22 @@ export const MIGRACIONES: Migracion[] = [
     nombre: "0009_pasivo_mov_cargos",
     sentencias: ['ALTER TABLE "pasivo_movimientos" ADD COLUMN "cargos" integer;'],
   },
+  {
+    nombre: "0010_viajes",
+    sentencias: [
+      "CREATE TABLE \"viajes\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"nombre\" text NOT NULL,\n\t\"moneda_base\" text NOT NULL,\n\t\"tasas\" text DEFAULT '{}' NOT NULL,\n\t\"codigo\" text NOT NULL,\n\t\"creado_por\" text NOT NULL,\n\t\"creado_en\" timestamp with time zone DEFAULT now() NOT NULL\n);",
+      "CREATE TABLE \"viaje_miembros\" (\n\t\"viaje_id\" text NOT NULL,\n\t\"usuario_id\" text NOT NULL,\n\t\"unido_en\" timestamp with time zone DEFAULT now() NOT NULL,\n\tCONSTRAINT \"viaje_miembros_viaje_id_usuario_id_pk\" PRIMARY KEY(\"viaje_id\",\"usuario_id\")\n);",
+      "CREATE TABLE \"viaje_gastos\" (\n\t\"id\" text NOT NULL,\n\t\"viaje_id\" text NOT NULL,\n\t\"creado_por\" text NOT NULL,\n\t\"descripcion\" text NOT NULL,\n\t\"categoria\" text NOT NULL,\n\t\"moneda\" text NOT NULL,\n\t\"monto_total\" integer NOT NULL,\n\t\"modo\" text NOT NULL,\n\t\"ocurrio_en\" timestamp with time zone NOT NULL,\n\t\"creado_en\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"actualizado_en\" timestamp with time zone DEFAULT now() NOT NULL,\n\tCONSTRAINT \"viaje_gastos_viaje_id_id_pk\" PRIMARY KEY(\"viaje_id\",\"id\")\n);",
+      "CREATE TABLE \"viaje_partes\" (\n\t\"viaje_id\" text NOT NULL,\n\t\"gasto_id\" text NOT NULL,\n\t\"usuario_id\" text NOT NULL,\n\t\"pagado\" integer DEFAULT 0 NOT NULL,\n\t\"debe\" integer DEFAULT 0 NOT NULL,\n\t\"participa\" boolean DEFAULT false NOT NULL,\n\t\"peso\" integer,\n\tCONSTRAINT \"viaje_partes_viaje_id_gasto_id_usuario_id_pk\" PRIMARY KEY(\"viaje_id\",\"gasto_id\",\"usuario_id\")\n);",
+      "CREATE TABLE \"viaje_pagos\" (\n\t\"id\" text NOT NULL,\n\t\"viaje_id\" text NOT NULL,\n\t\"de\" text NOT NULL,\n\t\"a\" text NOT NULL,\n\t\"monto\" integer NOT NULL,\n\t\"registrado_por\" text NOT NULL,\n\t\"ocurrio_en\" timestamp with time zone NOT NULL,\n\t\"creado_en\" timestamp with time zone DEFAULT now() NOT NULL,\n\tCONSTRAINT \"viaje_pagos_viaje_id_id_pk\" PRIMARY KEY(\"viaje_id\",\"id\")\n);",
+      "ALTER TABLE \"viajes\" ADD CONSTRAINT \"viajes_creado_por_usuarios_id_fk\" FOREIGN KEY (\"creado_por\") REFERENCES \"public\".\"usuarios\"(\"id\") ON DELETE no action ON UPDATE no action;",
+      "ALTER TABLE \"viaje_miembros\" ADD CONSTRAINT \"viaje_miembros_viaje_id_viajes_id_fk\" FOREIGN KEY (\"viaje_id\") REFERENCES \"public\".\"viajes\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+      "ALTER TABLE \"viaje_miembros\" ADD CONSTRAINT \"viaje_miembros_usuario_id_usuarios_id_fk\" FOREIGN KEY (\"usuario_id\") REFERENCES \"public\".\"usuarios\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+      "ALTER TABLE \"viaje_gastos\" ADD CONSTRAINT \"viaje_gastos_viaje_id_viajes_id_fk\" FOREIGN KEY (\"viaje_id\") REFERENCES \"public\".\"viajes\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+      "ALTER TABLE \"viaje_partes\" ADD CONSTRAINT \"viaje_partes_viaje_id_viajes_id_fk\" FOREIGN KEY (\"viaje_id\") REFERENCES \"public\".\"viajes\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+      "ALTER TABLE \"viaje_pagos\" ADD CONSTRAINT \"viaje_pagos_viaje_id_viajes_id_fk\" FOREIGN KEY (\"viaje_id\") REFERENCES \"public\".\"viajes\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+      "CREATE UNIQUE INDEX \"viajes_codigo_idx\" ON \"viajes\" USING btree (\"codigo\");",
+      "CREATE INDEX \"viaje_miembros_usuario_idx\" ON \"viaje_miembros\" USING btree (\"usuario_id\");",
+    ],
+  },
 ];

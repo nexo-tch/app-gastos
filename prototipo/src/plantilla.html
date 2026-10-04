@@ -111,6 +111,15 @@
           </svg>
           <span>Fijos</span>
         </button>
+        <button type="button" class="pestana" data-vista="viajes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="4" y="7" width="16" height="12.5" rx="2.4" />
+            <path d="M9 7V5.2A1.7 1.7 0 0 1 10.7 3.5h2.6A1.7 1.7 0 0 1 15 5.2V7" />
+            <path d="M9 11v5M15 11v5" />
+          </svg>
+          <span>Viajes</span>
+        </button>
       </nav>
     </header>
 
@@ -802,6 +811,217 @@
           <span class="hoja__espaciador"></span>
           <button type="button" class="boton boton--fantasma" data-cerrar>Cancelar</button>
           <button type="submit" class="boton boton--solido">Guardar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Crear o editar un viaje en grupo -->
+    <dialog class="hoja hoja--angosta" id="dialogo-viaje" aria-labelledby="titulo-viaje">
+      <form method="dialog" class="hoja__forma" id="forma-viaje">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-viaje">Nuevo viaje</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+        <div class="hoja__cuerpo">
+          <label class="campo">
+            <span class="campo__etiqueta">Nombre</span>
+            <input class="entrada" id="viaje-nombre" maxlength="60" placeholder="Viaje a Europa" required />
+          </label>
+          <label class="campo">
+            <span class="campo__etiqueta">Moneda en la que se suman las cuentas</span>
+            <select class="entrada" id="viaje-moneda-base"></select>
+          </label>
+          <fieldset class="campo">
+            <legend class="campo__etiqueta">Tasas de cambio del viaje</legend>
+            <p class="pista" id="viaje-tasas-pista">
+              Una tasa fija que acuerdan entre todos. Solo se puede cargar gastos en las monedas que
+              tengan tasa.
+            </p>
+            <div class="reparto__detalle" id="viaje-tasas"></div>
+          </fieldset>
+          <p class="reparto__resultado" id="viaje-error" data-error="true" hidden></p>
+        </div>
+        <div class="hoja__pie">
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Cancelar</button>
+          <button type="submit" class="boton boton--solido" id="viaje-guardar">Crear viaje</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Unirse a un viaje con el código o el enlace de invitación -->
+    <dialog class="hoja hoja--angosta" id="dialogo-viaje-unirse" aria-labelledby="titulo-viaje-unirse">
+      <form method="dialog" class="hoja__forma" id="forma-viaje-unirse">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-viaje-unirse">Unirme a un viaje</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+        <div class="hoja__cuerpo">
+          <p class="pista">Pega el enlace que te compartieron, o solo el código.</p>
+          <label class="campo">
+            <span class="campo__etiqueta">Enlace o código</span>
+            <input class="entrada" id="viaje-unirse-codigo" autocomplete="off" required />
+          </label>
+          <p class="reparto__resultado" id="viaje-unirse-error" data-error="true" hidden></p>
+        </div>
+        <div class="hoja__pie">
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Cancelar</button>
+          <button type="submit" class="boton boton--solido">Unirme</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Invitar al viaje -->
+    <dialog class="hoja hoja--angosta" id="dialogo-viaje-invitar" aria-labelledby="titulo-viaje-invitar">
+      <div class="hoja__forma">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-viaje-invitar">Invitar al viaje</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+        <div class="hoja__cuerpo">
+          <p class="pista">
+            Quien abra este enlace con su cuenta de la app entra al viaje, ve todos los gastos y puede
+            cargar los suyos. Si no tiene cuenta, se la crea y entra.
+          </p>
+          <p class="mensaje" id="viaje-invitar-enlace"></p>
+        </div>
+        <div class="hoja__pie">
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Cerrar</button>
+          <button type="button" class="boton boton--solido" id="viaje-invitar-compartir">Compartir</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Registrar o editar un gasto del viaje -->
+    <dialog class="hoja" id="dialogo-viaje-gasto" aria-labelledby="titulo-viaje-gasto">
+      <form method="dialog" class="hoja__forma" id="forma-viaje-gasto">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-viaje-gasto">Gasto del viaje</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+        <div class="hoja__cuerpo">
+          <label class="campo">
+            <span class="campo__etiqueta">Qué fue</span>
+            <input class="entrada" id="vg-descripcion" maxlength="80" autocomplete="off"
+                   placeholder="Entradas al Camp Nou" required />
+          </label>
+          <div class="pareja pareja--monto">
+            <label class="campo campo--monto">
+              <span class="campo__etiqueta">Cuánto</span>
+              <div class="monto">
+                <span class="monto__signo" id="vg-signo" aria-hidden="true">€</span>
+                <input class="monto__entrada" id="vg-monto" inputmode="decimal" autocomplete="off"
+                       placeholder="0" required />
+              </div>
+            </label>
+            <label class="campo">
+              <span class="campo__etiqueta">Moneda</span>
+              <select class="entrada" id="vg-moneda"></select>
+            </label>
+          </div>
+          <fieldset class="campo">
+            <legend class="campo__etiqueta">En qué</legend>
+            <div class="rejilla-categorias" id="vg-categorias"></div>
+          </fieldset>
+          <label class="campo">
+            <span class="campo__etiqueta">Cuándo</span>
+            <input class="entrada" id="vg-fecha" type="date" required />
+          </label>
+
+          <section class="reparto">
+            <div class="reparto__cabeza">
+              <span class="campo__etiqueta">Quién pagó</span>
+              <div class="segmentos" role="group" aria-label="Cuántas personas pagaron" id="vg-pago-modo">
+                <button type="button" class="segmento" data-vg-pago="uno" aria-pressed="true">Una persona</button>
+                <button type="button" class="segmento" data-vg-pago="varios" aria-pressed="false">Varias</button>
+              </div>
+            </div>
+            <div class="fichas" id="vg-pagadores"></div>
+            <div class="reparto__detalle" id="vg-pagadores-montos"></div>
+          </section>
+
+          <section class="reparto">
+            <div class="reparto__cabeza">
+              <span class="campo__etiqueta">Entre quiénes se reparte</span>
+            </div>
+            <div class="fichas" id="vg-participantes"></div>
+            <div class="segmentos" role="group" aria-label="Cómo se reparte" id="vg-modo">
+              <button type="button" class="segmento" data-vg-modo="equal" aria-pressed="true">Partes iguales</button>
+              <button type="button" class="segmento" data-vg-modo="percent" aria-pressed="false">Porcentaje</button>
+              <button type="button" class="segmento" data-vg-modo="amounts" aria-pressed="false">Montos</button>
+            </div>
+            <div class="reparto__detalle" id="vg-detalle"></div>
+            <p class="reparto__resultado" id="vg-resultado"></p>
+          </section>
+        </div>
+        <div class="hoja__pie">
+          <button type="button" class="boton boton--peligro" id="vg-eliminar" hidden>Eliminar</button>
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Cancelar</button>
+          <button type="submit" class="boton boton--solido" id="vg-guardar">Guardar gasto</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Ver un gasto del viaje: quién pagó y cuánto le toca a cada uno -->
+    <dialog class="hoja hoja--angosta" id="dialogo-viaje-ver" aria-labelledby="titulo-viaje-ver">
+      <div class="hoja__forma">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-viaje-ver">Gasto</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+        <div class="hoja__cuerpo" id="viaje-ver-cuerpo"></div>
+        <div class="hoja__pie">
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Cerrar</button>
+          <button type="button" class="boton boton--solido" id="viaje-ver-editar" hidden>Editar</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Registrar un pago entre miembros del viaje -->
+    <dialog class="hoja hoja--angosta" id="dialogo-viaje-pago" aria-labelledby="titulo-viaje-pago">
+      <form method="dialog" class="hoja__forma" id="forma-viaje-pago">
+        <div class="hoja__cabeza">
+          <h2 id="titulo-viaje-pago">Registrar pago</h2>
+          <button type="button" class="icono" data-cerrar aria-label="Cerrar">✕</button>
+        </div>
+        <div class="hoja__cuerpo">
+          <p class="pista">
+            Cuando alguien le transfiere a otro para saldar, completo o un abono. Lo registra quien paga
+            o quien recibe.
+          </p>
+          <div class="pareja">
+            <label class="campo">
+              <span class="campo__etiqueta">Quién pagó</span>
+              <select class="entrada" id="vp-de" required></select>
+            </label>
+            <label class="campo">
+              <span class="campo__etiqueta">A quién</span>
+              <select class="entrada" id="vp-a" required></select>
+            </label>
+          </div>
+          <label class="campo campo--monto">
+            <span class="campo__etiqueta">Cuánto</span>
+            <div class="monto">
+              <span class="monto__signo" id="vp-signo" aria-hidden="true">$</span>
+              <input class="monto__entrada" id="vp-monto" inputmode="decimal" autocomplete="off"
+                     placeholder="0" required />
+            </div>
+          </label>
+          <p class="pista" id="vp-pista"></p>
+          <label class="campo">
+            <span class="campo__etiqueta">Cuándo</span>
+            <input class="entrada" id="vp-fecha" type="date" required />
+          </label>
+          <p class="reparto__resultado" id="vp-error" data-error="true" hidden></p>
+        </div>
+        <div class="hoja__pie">
+          <span class="hoja__espaciador"></span>
+          <button type="button" class="boton boton--fantasma" data-cerrar>Cancelar</button>
+          <button type="submit" class="boton boton--solido">Registrar pago</button>
         </div>
       </form>
     </dialog>

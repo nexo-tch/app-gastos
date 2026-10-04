@@ -13,6 +13,7 @@ import * as repartos from '../../packages/core/src/domain/splits.js';
 import * as deudas from '../../packages/core/src/domain/debts.js';
 import * as debidas from '../../packages/core/src/domain/owed.js';
 import * as personasEnlace from '../../packages/core/src/domain/personLink.js';
+import * as viajes from '../../packages/core/src/domain/trips.js';
 import { DEFAULT_CATEGORIES } from '../../packages/core/src/seed.js';
 
 const motor = {
@@ -24,6 +25,7 @@ const motor = {
   ...deudas,
   ...debidas,
   ...personasEnlace,
+  ...viajes,
   DEFAULT_CATEGORIES,
 };
 

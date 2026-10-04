@@ -1302,7 +1302,284 @@ async function revisarSincronizacion() {
   ventana.close();
 }
 
+/* ── 12. Viajes en grupo ───────────────────────────────────────── */
+
+await revisarViajes();
+
+/**
+ * Un servidor de mentira que se comporta como `/api/viajes`: guarda los
+ * viajes en memoria y reparte con el mismo motor que el de verdad.
+ */
+async function revisarViajes() {
+  const yo = 'u-ana';
+  const viajes = [];
+  let siguiente = 0;
+  const nuevoId = () => `id${(siguiente += 1)}`;
+  const responder = (cuerpo, status = 200) => ({ ok: status < 400, status, json: async () => cuerpo });
+
+  const ventana = new JSDOM(html, {
+    url: 'http://localhost/',
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    virtualConsole: consola,
+    beforeParse(window) {
+      const dialogo = window.HTMLDialogElement?.prototype;
+      if (dialogo) {
+        dialogo.showModal = function () {
+          this.open = true;
+        };
+        dialogo.close = function () {
+          this.open = false;
+        };
+      }
+      window.confirm = () => true;
+      window.navigator.clipboard = { writeText: async () => {} };
+      window.addEventListener('error', (evento) => fallos.push(evento.error?.stack ?? evento.message));
+
+      window.fetch = async (url, init = {}) => {
+        const metodo = init.method ?? 'GET';
+        const cuerpo = init.body ? JSON.parse(init.body) : null;
+
+        if (url === '/api/notificaciones') return responder({ notificaciones: [] });
+        if (url === '/api/estado' && metodo === 'GET') {
+          return responder({
+            revision: 0,
+            nombre: 'Ana',
+            correo: 'ana@ejemplo.com',
+            datos: {
+              version: 1,
+              cuentas: [{ id: 'efectivo', name: 'Efectivo', kind: 'cash' }],
+              categorias: [{ id: 'mercado', name: 'Mercado', color: '#4A9D5B', isArchived: false }],
+              personas: [],
+              gastos: [],
+              repartos: [],
+              abonos: [],
+              asignaciones: [],
+              deudas: [],
+              presupuestos: {},
+              fijos: [],
+              instancias: [],
+            },
+          });
+        }
+        if (url === '/api/estado') return responder({ revision: 1 });
+
+        if (url === '/api/viajes' && metodo === 'GET') return responder({ yo, viajes });
+
+        if (url === '/api/viajes' && metodo === 'POST') {
+          // Como si los demás ya hubieran abierto la invitación.
+          const viaje = {
+            id: nuevoId(),
+            nombre: cuerpo.nombre,
+            monedaBase: cuerpo.monedaBase,
+            tasas: cuerpo.tasas,
+            codigo: 'codigo-europa',
+            creadoPor: yo,
+            creadoEn: new Date().toISOString(),
+            miembros: [
+              { id: yo, nombre: 'Ana' },
+              { id: 'u-andres', nombre: 'Andrés' },
+              { id: 'u-leo', nombre: 'Leo' },
+              { id: 'u-edxa', nombre: 'Edxa' },
+            ],
+            gastos: [],
+            pagos: [],
+          };
+          viajes.push(viaje);
+          return responder({ viaje });
+        }
+
+        if (url === '/api/viajes/unirse') {
+          const viaje = {
+            id: nuevoId(),
+            nombre: 'Finde en Madrid',
+            monedaBase: 'EUR',
+            tasas: {},
+            codigo: cuerpo.codigo,
+            creadoPor: 'u-leo',
+            creadoEn: new Date().toISOString(),
+            miembros: [
+              { id: 'u-leo', nombre: 'Leo' },
+              { id: yo, nombre: 'Ana' },
+            ],
+            gastos: [],
+            pagos: [],
+          };
+          viajes.push(viaje);
+          return responder({ viaje });
+        }
+
+        const uno = /^\/api\/viajes\/([^/]+)$/.exec(url);
+        if (uno && metodo === 'GET') return responder({ viaje: viajes.find((v) => v.id === uno[1]) });
+
+        const gastos = /^\/api\/viajes\/([^/]+)\/gastos$/.exec(url);
+        if (gastos && metodo === 'POST') {
+          const viaje = viajes.find((v) => v.id === gastos[1]);
+          let partes;
+          try {
+            partes = window.Motor.resolveTripExpense({
+              totalCents: cuerpo.montoTotal,
+              payers: cuerpo.pagadores.map((p) => ({ memberId: p.usuarioId, amountCents: p.monto })),
+              mode: cuerpo.modo,
+              participants: cuerpo.participantes.map((p) => ({
+                memberId: p.usuarioId,
+                amountCents: p.monto,
+                percent: p.porcentaje,
+              })),
+            });
+          } catch (error) {
+            return responder({ error: error.message }, 400);
+          }
+          const participan = new Set(cuerpo.participantes.map((p) => p.usuarioId));
+          viaje.gastos.push({
+            id: nuevoId(),
+            creadoPor: yo,
+            descripcion: cuerpo.descripcion,
+            categoria: cuerpo.categoria,
+            moneda: cuerpo.moneda,
+            montoTotal: cuerpo.montoTotal,
+            modo: cuerpo.modo,
+            ocurrioEn: `${cuerpo.ocurrioEn}T17:00:00.000Z`,
+            partes: partes.map((p) => ({
+              usuarioId: p.memberId,
+              pagado: p.paidCents,
+              debe: p.owedCents,
+              participa: participan.has(p.memberId),
+              peso: null,
+            })),
+          });
+          return responder({ viaje });
+        }
+
+        const pagos = /^\/api\/viajes\/([^/]+)\/pagos$/.exec(url);
+        if (pagos && metodo === 'POST') {
+          const viaje = viajes.find((v) => v.id === pagos[1]);
+          viaje.pagos.push({ id: nuevoId(), ...cuerpo, registradoPor: yo, ocurrioEn: new Date().toISOString() });
+          return responder({ viaje });
+        }
+
+        throw new Error(`fetch sin simular: ${url} ${metodo}`);
+      };
+    },
+  }).window;
+
+  const doc = ventana.document;
+  const clicV = (selector) => {
+    const nodo = doc.querySelector(selector);
+    if (!nodo) throw new Error(`No existe ${selector}`);
+    nodo.dispatchEvent(new ventana.MouseEvent('click', { bubbles: true }));
+  };
+  const escribirV = (selector, valor) => {
+    const nodo = doc.querySelector(selector);
+    nodo.value = valor;
+    nodo.dispatchEvent(new ventana.Event('input', { bubbles: true }));
+  };
+  const enviarV = (selector) =>
+    doc.querySelector(selector).dispatchEvent(new ventana.Event('submit', { bubbles: true, cancelable: true }));
+  const textoV = (selector) => doc.querySelector(selector)?.textContent.replace(/\s+/g, ' ').trim() ?? '';
+  const pausa = (ms = 20) => new Promise((listo) => setTimeout(listo, ms));
+
+  await pausa();
+  clicV('.pestana[data-vista="viajes"]');
+  await pausa();
+  comprobar('viajes: sin viajes invita a crear uno', textoV('#lienzo').includes('Todavía no estás en ningún viaje'));
+  comprobar('viajes: no muestra el tablero del mes', doc.getElementById('tablero').hidden);
+
+  clicV('[data-viaje-nuevo]');
+  doc.getElementById('viaje-nombre').value = 'Viaje a Europa';
+  doc.querySelector('[data-viaje-tasa="EUR"]').value = '4.500';
+  enviarV('#forma-viaje');
+  await pausa();
+
+  comprobar('viajes: al crear abre la invitación', doc.getElementById('dialogo-viaje-invitar').open);
+  comprobar('viajes: la invitación lleva el enlace', textoV('#viaje-invitar-enlace').includes('/#unirse=codigo-europa'));
+  doc.getElementById('dialogo-viaje-invitar').close();
+  comprobar('viajes: entra directo al viaje', textoV('#lienzo').includes('Viaje a Europa'));
+
+  // El ejemplo del Camp Nou: pago yo los 400 € y se reparte entre los cuatro.
+  clicV('[data-viaje-gasto-nuevo]');
+  await pausa();
+  comprobar('viajes: el gasto arranca en euros', doc.getElementById('vg-moneda').value === 'EUR');
+  escribirV('#vg-descripcion', 'Entradas al Camp Nou');
+  escribirV('#vg-monto', '400');
+  clicV('[data-vg-categoria="actividades"]');
+  comprobar('viajes: reparte en partes iguales', textoV('#vg-resultado').includes('€ 100,00'), textoV('#vg-resultado'));
+  enviarV('#forma-viaje-gasto');
+  await pausa();
+
+  comprobar('viajes: guardar cierra el diálogo', !doc.getElementById('dialogo-viaje-gasto').open);
+  comprobar(
+    'viajes: dice cuánto me deben en pesos',
+    textoV('.pasivos-resumen').includes('Te deben $ 1.350.000'),
+    textoV('.pasivos-resumen'),
+  );
+  const deudas = [...doc.querySelectorAll('.viaje-deuda')].map((n) => n.textContent.replace(/\s+/g, ' ').trim());
+  comprobar('viajes: tres personas me pagan', deudas.length === 3, deudas.join(' | '));
+  comprobar(
+    'viajes: Andrés me paga 450.000',
+    deudas.some((d) => d.includes('Andrés te paga') && d.includes('$ 450.000')),
+    deudas.join(' | '),
+  );
+
+  // Una cena que pagaron dos: si lo puesto no cuadra, lo dice en plata.
+  clicV('[data-viaje-gasto-nuevo]');
+  await pausa();
+  escribirV('#vg-descripcion', 'Cena');
+  escribirV('#vg-monto', '90');
+  clicV('[data-vg-pago="varios"]');
+  escribirV('[data-vg-pago-monto="u-ana"]', '50');
+  comprobar('viajes: avisa cuánto falta por pagar', textoV('#vg-resultado').includes('faltan € 40,00'), textoV('#vg-resultado'));
+  escribirV('[data-vg-pago-monto="u-andres"]', '40');
+  clicV('[data-vg-participante="u-edxa"]');
+  comprobar('viajes: la cena queda entre tres', textoV('#vg-resultado').includes('€ 30,00'), textoV('#vg-resultado'));
+  enviarV('#forma-viaje-gasto');
+  await pausa();
+  comprobar('viajes: la cena aparece en la lista', textoV('#lienzo').includes('Pagaron tú y Andrés'));
+
+  // El botón general propone mi transferencia y no deja pagar de más.
+  clicV('[data-viaje-pago-libre]');
+  comprobar('viajes: el botón general abre el pago', doc.getElementById('dialogo-viaje-pago').open);
+  comprobar('viajes: el pago dice hasta cuánto se puede', textoV('#vp-pista').includes('hasta $'), textoV('#vp-pista'));
+  doc.getElementById('vp-monto').value = '99.999.999';
+  enviarV('#forma-viaje-pago');
+  await pausa();
+  comprobar(
+    'viajes: no deja registrar un pago de más',
+    doc.getElementById('dialogo-viaje-pago').open && textoV('#vp-error').includes('Es más de lo pendiente'),
+    textoV('#vp-error'),
+  );
+  // Entre dos que deben no hay nada que pagar.
+  const de = doc.getElementById('vp-de');
+  const a = doc.getElementById('vp-a');
+  de.value = 'u-leo';
+  a.value = 'u-edxa';
+  a.dispatchEvent(new ventana.Event('change', { bubbles: true }));
+  comprobar('viajes: entre dos que deben avisa que no hay nada', textoV('#vp-pista').includes('no tiene nada pendiente'), textoV('#vp-pista'));
+  doc.getElementById('dialogo-viaje-pago').close();
+
+  // Registrar un pago baja una de las deudas.
+  const antes = doc.querySelectorAll('.viaje-deuda').length;
+  clicV('[data-viaje-pagar]');
+  enviarV('#forma-viaje-pago');
+  await pausa();
+  comprobar(
+    'viajes: un pago registrado salda una deuda',
+    doc.querySelectorAll('.viaje-deuda').length === antes - 1,
+    `${antes} → ${doc.querySelectorAll('.viaje-deuda').length}`,
+  );
+  comprobar('viajes: el pago queda en la lista', textoV('#lienzo').includes('Pagos registrados'));
+
+  // Abrir un enlace de invitación con la app abierta.
+  ventana.location.hash = '#unirse=codigo-madrid';
+  await pausa(80);
+  comprobar('viajes: el enlace de invitación te une al viaje', textoV('#lienzo').includes('Finde en Madrid'));
+
+  ventana.close();
+}
+
 /* ── Resultado ──────────────────────────────────────────────────── */
+
+window.close();
 
 const malas = pruebas.filter((p) => !p.bien);
 

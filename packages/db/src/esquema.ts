@@ -339,3 +339,110 @@ export const notificaciones = pgTable(
     pendientesIdx: index('notificaciones_pendientes_idx').on(t.usuarioId, t.creadaEn),
   }),
 );
+
+/* ── Viajes en grupo ───────────────────────────────────────────────
+ *
+ * Lo unico de la base que no es de un solo usuario. Un viaje lo comparten
+ * varias cuentas: cada una carga sus gastos y todas ven los de todas. Por eso
+ * no cuelga de `usuario_id` ni viaja dentro de `/api/estado`, sino que tiene
+ * sus propios endpoints, que miran en cada peticion que quien pide sea
+ * miembro del viaje.
+ */
+
+export const viajes = pgTable(
+  'viajes',
+  {
+    id: text('id').primaryKey(),
+    nombre: text('nombre').notNull(),
+    /** En la que se suman los saldos. No cambia despues de crear el viaje. */
+    monedaBase: text('moneda_base').notNull(),
+    /**
+     * JSON `{ "EUR": 4500 }`: cuantas unidades de la moneda base vale una de
+     * cada otra. Es una tasa fija que acuerda el grupo, no la del dia.
+     */
+    tasas: text('tasas').notNull().default('{}'),
+    /** Lo que va en el enlace de invitacion. Quien lo tenga puede unirse. */
+    codigo: text('codigo').notNull(),
+    creadoPor: text('creado_por')
+      .notNull()
+      .references(() => usuarios.id),
+    creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ codigoIdx: uniqueIndex('viajes_codigo_idx').on(t.codigo) }),
+);
+
+const delViaje = () => ({
+  viajeId: text('viaje_id')
+    .notNull()
+    .references(() => viajes.id, { onDelete: 'cascade' }),
+});
+
+export const viajeMiembros = pgTable(
+  'viaje_miembros',
+  {
+    ...delViaje(),
+    usuarioId: text('usuario_id')
+      .notNull()
+      .references(() => usuarios.id, { onDelete: 'cascade' }),
+    unidoEn: timestamp('unido_en', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.viajeId, t.usuarioId] }),
+    usuarioIdx: index('viaje_miembros_usuario_idx').on(t.usuarioId),
+  }),
+);
+
+export const viajeGastos = pgTable(
+  'viaje_gastos',
+  {
+    id: text('id').notNull(),
+    ...delViaje(),
+    /** Solo quien lo creo puede cambiarlo o borrarlo. */
+    creadoPor: text('creado_por').notNull(),
+    descripcion: text('descripcion').notNull(),
+    categoria: text('categoria').notNull(),
+    moneda: text('moneda').notNull(),
+    montoTotal: integer('monto_total').notNull(),
+    /** `equal`, `amounts` o `percent`: como se repartio, para poder editarlo igual. */
+    modo: text('modo').notNull(),
+    ocurrioEn: timestamp('ocurrio_en', { withTimezone: true }).notNull(),
+    creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+    actualizadoEn: timestamp('actualizado_en', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.viajeId, t.id] }) }),
+);
+
+/**
+ * Una fila por miembro que pago, consumio o las dos cosas en un gasto. Lo
+ * pagado y lo consumido ya van resueltos al centavo; `peso` guarda lo que se
+ * escribio (centesimas de porcentaje, o el monto) para volver a editarlo.
+ */
+export const viajePartes = pgTable(
+  'viaje_partes',
+  {
+    ...delViaje(),
+    gastoId: text('gasto_id').notNull(),
+    usuarioId: text('usuario_id').notNull(),
+    pagado: integer('pagado').notNull().default(0),
+    debe: integer('debe').notNull().default(0),
+    participa: boolean('participa').notNull().default(false),
+    peso: integer('peso'),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.viajeId, t.gastoId, t.usuarioId] }) }),
+);
+
+/** Plata que un miembro le paso a otro para saldar, en la moneda base. */
+export const viajePagos = pgTable(
+  'viaje_pagos',
+  {
+    id: text('id').notNull(),
+    ...delViaje(),
+    de: text('de').notNull(),
+    a: text('a').notNull(),
+    monto: integer('monto').notNull(),
+    registradoPor: text('registrado_por').notNull(),
+    ocurrioEn: timestamp('ocurrio_en', { withTimezone: true }).notNull(),
+    creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.viajeId, t.id] }) }),
+);
