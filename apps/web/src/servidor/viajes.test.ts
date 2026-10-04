@@ -3,7 +3,7 @@
  * Estas pruebas cuidan sobre todo eso: que nadie de fuera entre, y que nadie
  * de dentro toque lo que no es suyo.
  */
-import { computeTripBalances, simplifyDebts } from '@gastos/core';
+import { simplifyDebts } from '@gastos/core';
 import { base, reiniciarConexion } from '@gastos/db';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -19,8 +19,8 @@ import {
   leerViaje,
   listarViajes,
   registrarPagoViaje,
+  saldosDeViaje,
   unirseAViaje,
-  type ViajeCompleto,
 } from './viajes.js';
 
 beforeAll(async () => {
@@ -62,18 +62,7 @@ const gasto = (parcial: Record<string, unknown>) =>
     ...parcial,
   });
 
-const saldos = (viaje: ViajeCompleto) =>
-  computeTripBalances({
-    memberIds: viaje.miembros.map((m) => m.id),
-    baseCurrency: viaje.monedaBase,
-    rates: viaje.tasas,
-    expenses: viaje.gastos.map((g) => ({
-      currency: g.moneda,
-      totalCents: g.montoTotal,
-      parts: g.partes.map((p) => ({ memberId: p.usuarioId, paidCents: p.pagado, owedCents: p.debe })),
-    })),
-    settlements: viaje.pagos.map((p) => ({ fromId: p.de, toId: p.a, amountCents: p.monto })),
-  });
+const saldos = saldosDeViaje;
 
 async function grupoDeCuatro() {
   const camilo = await registrar('Camilo');
@@ -322,9 +311,42 @@ describe('pagos para saldar', () => {
     const pagado = await registrarPagoViaje(andres, viaje.id, { de: andres, a: camilo, monto: 100_000_00 });
     expect(saldos(pagado).every((b) => b.balanceCents === 0)).toBe(true);
 
+    // Ya no le debe nada: un peso más lo dejaría con plata a favor que nadie le debe.
+    await rechazo(registrarPagoViaje(andres, viaje.id, { de: andres, a: camilo, monto: 100 }), 400);
+
     const idPago = pagado.pagos[0]!.id;
     await rechazo(borrarPagoViaje(camilo, viaje.id, idPago), 403);
     const sinPago = await borrarPagoViaje(andres, viaje.id, idPago);
     expect(sinPago.pagos).toEqual([]);
+  });
+});
+
+describe('no se puede pagar de más', () => {
+  it('ni más de lo que debe quien paga, ni a quien no le deben', async () => {
+    const { camilo, andres, leo, viaje } = await grupoDeCuatro();
+    await guardarGastoViaje(
+      camilo,
+      viaje.id,
+      gasto({
+        moneda: 'COP',
+        montoTotal: 300_000_00,
+        pagadores: [{ usuarioId: camilo, monto: 300_000_00 }],
+        participantes: [{ usuarioId: camilo }, { usuarioId: andres }, { usuarioId: leo }],
+      }),
+    );
+
+    const error = await registrarPagoViaje(leo, viaje.id, { de: leo, a: camilo, monto: 150_000_00 }).catch(
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(ViajeError);
+    expect((error as ViajeError).message).toMatch(/lo máximo que Leo le puede pagar a Camilo/);
+
+    // Andrés también debe: Leo no tiene nada que pagarle a él.
+    await rechazo(registrarPagoViaje(leo, viaje.id, { de: leo, a: andres, monto: 100 }), 400);
+
+    // Un abono parcial sí entra, y lo exacto que falta también.
+    await registrarPagoViaje(leo, viaje.id, { de: leo, a: camilo, monto: 40_000_00 });
+    const saldado = await registrarPagoViaje(camilo, viaje.id, { de: leo, a: camilo, monto: 60_000_00 });
+    expect(saldos(saldado).find((b) => b.memberId === leo)?.balanceCents).toBe(0);
   });
 });

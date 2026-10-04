@@ -3283,7 +3283,14 @@
       ${cuentas.error ? `<div class="vacio"><strong>Las cuentas no cuadran</strong>${escapar(cuentas.error)}</div>` : ''}
 
       <section class="bloque">
-        <div class="bloque__cabeza"><h2>Quién le paga a quién</h2></div>
+        <div class="bloque__cabeza">
+          <h2>Quién le paga a quién</h2>
+          ${
+            cuentas.transferencias.length
+              ? `<button type="button" class="boton boton--marco boton--chico" data-viaje-pago-libre>Registrar pago</button>`
+              : ''
+          }
+        </div>
         ${
           cuentas.transferencias.length === 0
             ? `<div class="vacio">${viaje.gastos.length ? 'Todos están a paz y salvo.' : 'Cuando carguen gastos, aquí aparece quién le debe a quién.'}</div>`
@@ -3879,6 +3886,42 @@
 
   const dialogoPagoViaje = document.getElementById('dialogo-viaje-pago');
 
+  /**
+   * Sin sugerencia (el botón general), se propone lo más probable: si debo,
+   * mi primera transferencia; si me deben, la primera que me llega.
+   */
+  function pagoSugerido(viaje) {
+    const { transferencias } = cuentasDeViaje(viaje);
+    const mia =
+      transferencias.find((t) => t.fromId === yoEnViajes) ??
+      transferencias.find((t) => t.toId === yoEnViajes);
+    return mia ? { de: mia.fromId, a: mia.toId, monto: mia.amountCents } : {};
+  }
+
+  /** Lo máximo que se puede pagar entre las dos personas elegidas, y el texto que lo explica. */
+  function topePagoViaje(viaje) {
+    const de = document.getElementById('vp-de').value;
+    const a = document.getElementById('vp-a').value;
+    const { saldos } = cuentasDeViaje(viaje);
+    const maximo = M.maxSettlementCents(saldos, de, a);
+    const nombreDe = quienEs(viaje, de);
+    const nombreA = a === yoEnViajes ? 'ti' : nombreMiembro(viaje, a);
+    let pista;
+    if (de === a) pista = 'Elige dos personas distintas.';
+    else if (maximo === 0) pista = `${nombreDe} no tiene nada pendiente que pagarle a ${nombreA}.`;
+    else pista = `Puede ser un abono o el total: hasta ${plataEn(viaje.monedaBase, maximo)}.`;
+    return { de, a, maximo, pista, nombreDe, nombreA };
+  }
+
+  function pintarTopePagoViaje() {
+    const viaje = viajeAbierto();
+    if (!viaje) return;
+    const tope = topePagoViaje(viaje);
+    const pista = document.getElementById('vp-pista');
+    pista.textContent = tope.pista;
+    pista.dataset.tope = tope.maximo > 0 ? 'si' : 'no';
+  }
+
   function abrirPagoViaje(viaje, sugerido = {}) {
     const opciones = viaje.miembros
       .map((m) => `<option value="${m.id}">${escapar(m.id === yoEnViajes ? `${m.nombre} (tú)` : m.nombre)}</option>`)
@@ -3895,6 +3938,7 @@
       : '';
     document.getElementById('vp-fecha').value = hoyDia();
     document.getElementById('vp-error').hidden = true;
+    pintarTopePagoViaje();
     dialogoPagoViaje.showModal();
   }
 
@@ -3916,6 +3960,13 @@
     if (cuerpo.monto <= 0) return fallar('Escribe cuánto fue.');
     if (cuerpo.de !== yoEnViajes && cuerpo.a !== yoEnViajes) {
       return fallar('Solo puedes registrar un pago que hiciste o que recibiste.');
+    }
+    const tope = topePagoViaje(viaje);
+    if (tope.maximo === 0) return fallar(tope.pista);
+    if (cuerpo.monto > tope.maximo) {
+      return fallar(
+        `Es más de lo pendiente: lo máximo que ${tope.nombreDe === 'Tú' ? 'puedes pagarle' : `${tope.nombreDe} le puede pagar`} a ${tope.nombreA} es ${plataEn(viaje.monedaBase, tope.maximo)}.`,
+      );
     }
 
     const resultado = await escribirViaje(`/api/viajes/${viaje.id}/pagos`, 'POST', cuerpo);
@@ -4024,6 +4075,11 @@
       return;
     }
 
+    if (objetivo.closest('[data-viaje-pago-libre]') && viaje) {
+      abrirPagoViaje(viaje, pagoSugerido(viaje));
+      return;
+    }
+
     const borrarPago = objetivo.closest('[data-viaje-borrar-pago]');
     if (borrarPago && viaje) {
       if (!confirm('¿Quitar este pago? La deuda vuelve a aparecer.')) return;
@@ -4123,6 +4179,10 @@
   document.getElementById('forma-viaje-gasto').addEventListener('submit', (evento) => {
     evento.preventDefault();
     guardarGastoViaje();
+  });
+
+  ['vp-de', 'vp-a'].forEach((campo) => {
+    document.getElementById(campo).addEventListener('change', pintarTopePagoViaje);
   });
 
   document.getElementById('forma-viaje-pago').addEventListener('submit', (evento) => {

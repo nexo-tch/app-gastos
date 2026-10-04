@@ -2,6 +2,9 @@ import {
   TRIP_CATEGORIES,
   TRIP_CURRENCIES,
   TripError,
+  computeTripBalances,
+  formatMoney,
+  maxSettlementCents,
   resolveTripExpense,
   type TripCategoryId,
 } from '@gastos/core';
@@ -483,6 +486,20 @@ export async function registrarPagoViaje(
     );
   if (miembros.length !== 2) throw new ViajeError(400, 'Las dos personas tienen que ser del viaje.');
 
+  // Nadie paga de más: si el pago supera lo pendiente, alguien quedaría
+  // debiendo al revés y el viaje terminaría con una deuda que nadie tuvo.
+  const viaje = await leerViaje(usuarioId, viajeId);
+  const maximo = maxSettlementCents(saldosDeViaje(viaje), datos.de, datos.a);
+  if (datos.monto > maximo) {
+    const nombre = (id: string) => viaje.miembros.find((m) => m.id === id)?.nombre ?? 'Esa persona';
+    throw new ViajeError(
+      400,
+      maximo === 0
+        ? `${nombre(datos.de)} no tiene nada pendiente que pagarle a ${nombre(datos.a)}.`
+        : `Es más de lo pendiente: lo máximo que ${nombre(datos.de)} le puede pagar a ${nombre(datos.a)} es ${formatMoney(maximo, { currency: viaje.monedaBase })}.`,
+    );
+  }
+
   await db.insert(esquema.viajePagos).values({
     id: nuevoId(),
     viajeId,
@@ -520,6 +537,21 @@ export async function borrarPagoViaje(
     .where(and(eq(esquema.viajePagos.viajeId, viajeId), eq(esquema.viajePagos.id, pagoId)));
 
   return leerViaje(usuarioId, viajeId);
+}
+
+/** El saldo de cada miembro en la moneda base, con el mismo motor que usa el navegador. */
+export function saldosDeViaje(viaje: ViajeCompleto) {
+  return computeTripBalances({
+    memberIds: viaje.miembros.map((m) => m.id),
+    baseCurrency: viaje.monedaBase,
+    rates: viaje.tasas,
+    expenses: viaje.gastos.map((g) => ({
+      currency: g.moneda,
+      totalCents: g.montoTotal,
+      parts: g.partes.map((p) => ({ memberId: p.usuarioId, paidCents: p.pagado, owedCents: p.debe })),
+    })),
+    settlements: viaje.pagos.map((p) => ({ fromId: p.de, toId: p.a, amountCents: p.monto })),
+  });
 }
 
 /* ── Utilidades ──────────────────────────────────────────────────── */

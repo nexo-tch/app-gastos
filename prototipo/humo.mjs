@@ -1536,6 +1536,27 @@ async function revisarViajes() {
   await pausa();
   comprobar('viajes: la cena aparece en la lista', textoV('#lienzo').includes('Pagaron tú y Andrés'));
 
+  // El botón general propone mi transferencia y no deja pagar de más.
+  clicV('[data-viaje-pago-libre]');
+  comprobar('viajes: el botón general abre el pago', doc.getElementById('dialogo-viaje-pago').open);
+  comprobar('viajes: el pago dice hasta cuánto se puede', textoV('#vp-pista').includes('hasta $'), textoV('#vp-pista'));
+  doc.getElementById('vp-monto').value = '99.999.999';
+  enviarV('#forma-viaje-pago');
+  await pausa();
+  comprobar(
+    'viajes: no deja registrar un pago de más',
+    doc.getElementById('dialogo-viaje-pago').open && textoV('#vp-error').includes('Es más de lo pendiente'),
+    textoV('#vp-error'),
+  );
+  // Entre dos que deben no hay nada que pagar.
+  const de = doc.getElementById('vp-de');
+  const a = doc.getElementById('vp-a');
+  de.value = 'u-leo';
+  a.value = 'u-edxa';
+  a.dispatchEvent(new ventana.Event('change', { bubbles: true }));
+  comprobar('viajes: entre dos que deben avisa que no hay nada', textoV('#vp-pista').includes('no tiene nada pendiente'), textoV('#vp-pista'));
+  doc.getElementById('dialogo-viaje-pago').close();
+
   // Registrar un pago baja una de las deudas.
   const antes = doc.querySelectorAll('.viaje-deuda').length;
   clicV('[data-viaje-pagar]');

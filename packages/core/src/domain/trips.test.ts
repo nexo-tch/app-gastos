@@ -3,6 +3,7 @@ import {
   TripError,
   computeTripBalances,
   convertToBase,
+  maxSettlementCents,
   resolveTripExpense,
   simplifyDebts,
 } from './trips.js';
@@ -245,5 +246,43 @@ describe('computeTripBalances y simplifyDebts', () => {
       { memberId: 'c', balanceCents: 1_000 },
     ]);
     expect(transfers).toEqual([{ fromId: 'a', toId: 'c', amountCents: 1_000 }]);
+  });
+});
+
+describe('maxSettlementCents', () => {
+  const saldos = [
+    { memberId: 'camilo', balanceCents: 1_440_000 },
+    { memberId: 'andres', balanceCents: -405_000 },
+    { memberId: 'leo', balanceCents: -585_000 },
+    { memberId: 'edxa', balanceCents: -450_000 },
+  ];
+
+  it('no deja pagar más de lo que debe quien paga', () => {
+    expect(maxSettlementCents(saldos, 'leo', 'camilo')).toBe(585_000);
+  });
+
+  it('no deja pagar más de lo que le deben a quien recibe', () => {
+    const pocos = [
+      { memberId: 'a', balanceCents: 100 },
+      { memberId: 'b', balanceCents: 400 },
+      { memberId: 'c', balanceCents: -500 },
+    ];
+    expect(maxSettlementCents(pocos, 'c', 'a')).toBe(100);
+  });
+
+  it('permite pagarle a alguien fuera de las transferencias sugeridas', () => {
+    // La app sugeriría c → a primero, pero c también puede saldar con b.
+    const dos = [
+      { memberId: 'a', balanceCents: 600 },
+      { memberId: 'b', balanceCents: 400 },
+      { memberId: 'c', balanceCents: -1_000 },
+    ];
+    expect(maxSettlementCents(dos, 'c', 'b')).toBe(400);
+  });
+
+  it('entre dos que deben, o a quien no le deben, es cero', () => {
+    expect(maxSettlementCents(saldos, 'leo', 'andres')).toBe(0);
+    expect(maxSettlementCents(saldos, 'camilo', 'leo')).toBe(0);
+    expect(maxSettlementCents(saldos, 'leo', 'leo')).toBe(0);
   });
 });

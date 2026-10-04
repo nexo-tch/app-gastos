@@ -2219,6 +2219,10 @@ select.entrada {
   grid-template-columns: minmax(0, 1fr) 110px;
 }
 
+#vp-pista[data-tope='no'] {
+  color: var(--peligro);
+}
+
 #dialogo-viaje-gasto .reparto .segmentos {
   align-self: flex-start;
 }

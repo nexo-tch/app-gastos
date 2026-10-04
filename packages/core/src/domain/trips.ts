@@ -316,6 +316,23 @@ export function simplifyDebts(balances: readonly Pick<TripMemberBalance, 'member
   return transfers;
 }
 
+/**
+ * Lo máximo que `fromId` le puede pagar a `toId` sin que nadie quede debiendo
+ * al revés: no más de lo que debe quien paga, ni de lo que le deben a quien
+ * recibe. No tiene que ser una de las transferencias sugeridas: alguien puede
+ * pagarle a otro por fuera de lo que propone la app, mientras no se pase.
+ */
+export function maxSettlementCents(
+  balances: readonly Pick<TripMemberBalance, 'memberId' | 'balanceCents'>[],
+  fromId: string,
+  toId: string,
+): Cents {
+  if (fromId === toId) return 0;
+  const owes = -(balances.find((b) => b.memberId === fromId)?.balanceCents ?? 0);
+  const owed = balances.find((b) => b.memberId === toId)?.balanceCents ?? 0;
+  return Math.max(0, Math.min(owes, owed));
+}
+
 function assertUnique(ids: readonly string[], verb: string): void {
   const seen = new Set<string>();
   for (const memberId of ids) {
