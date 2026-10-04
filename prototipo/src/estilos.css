@@ -2134,6 +2134,101 @@ select.entrada {
   color: var(--peligro);
 }
 
+/* ── Viajes en grupo ────────────────────────────────────────────── */
+
+.viaje-volver {
+  margin-bottom: -16px;
+}
+
+.viaje-acciones {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.viaje-acciones--resumen {
+  margin-top: 14px;
+}
+
+.viaje-rotulo {
+  margin: 0 0 6px;
+  color: var(--tablero-tenue);
+}
+
+/* Sobre el tablero oscuro, el boton de marco necesita el color del tablero. */
+.viaje-boton-claro {
+  color: var(--tablero-texto);
+  border-color: var(--tablero-pista);
+  background: transparent;
+}
+
+.viaje-saldo {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--texto-3);
+}
+
+.viaje-saldo[data-estado='cobrar'] {
+  color: var(--marca);
+}
+
+.viaje-saldo[data-estado='pagar'] {
+  color: var(--peligro);
+}
+
+.renglon--quieto {
+  grid-template-columns: minmax(0, 1fr) auto;
+  cursor: default;
+}
+
+.renglon--quieto:hover {
+  background: transparent;
+}
+
+.renglon--quieto .renglon__detalle {
+  white-space: normal;
+}
+
+.renglon--quieto .renglon__cifras {
+  gap: 4px;
+}
+
+.viaje-deuda .renglon__titulo {
+  font-weight: 400;
+}
+
+.viaje-deuda .renglon__titulo b {
+  font-weight: 600;
+}
+
+.viaje-deuda[data-me-toca='true'] {
+  background: var(--marca-tenue);
+}
+
+.ficha--quieta {
+  cursor: default;
+}
+
+.ficha--quieta:hover {
+  border-color: var(--borde-fuerte);
+}
+
+.pareja--monto {
+  grid-template-columns: minmax(0, 1fr) 110px;
+}
+
+#dialogo-viaje-gasto .reparto .segmentos {
+  align-self: flex-start;
+}
+
+#viaje-ver-cuerpo .recibido__resumen {
+  font-family: var(--mono);
+  font-size: 22px;
+  color: var(--texto);
+}
+
 /* ── Dialogos ───────────────────────────────────────────────────── */
 
 .hoja {
@@ -2536,6 +2631,10 @@ select.entrada {
     grid-template-columns: 1fr;
   }
 
+  .pareja--monto {
+    grid-template-columns: minmax(0, 1fr) 96px;
+  }
+
   /*
    * En el telefono las secciones viven abajo, al alcance del pulgar. Es la
    * misma lista de botones: solo cambia donde se planta.
@@ -2558,11 +2657,19 @@ select.entrada {
 
   .pestana {
     flex: 1;
+    min-width: 0;
     flex-direction: column;
     gap: 3px;
-    padding: 9px 2px 8px;
-    font-size: 10.5px;
-    letter-spacing: -0.01em;
+    padding: 9px 1px 8px;
+    font-size: 10px;
+    letter-spacing: -0.02em;
+  }
+
+  /* Siete secciones en un telefono angosto: antes de desbordar, se recorta la palabra. */
+  .pestana span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .pestana svg {
